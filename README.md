@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alexa Neo | IA: O Próximo Nível</title>
+    <!-- Carregamento do Tailwind CSS e da Fonte Retro 'VT323' -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <!-- Ícones Lucide (emulando um visual minimalista/pixelado) -->
+    <script type="module" src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Variáveis CSS para a Paleta Neon */
+        :root {
+            --neon-blue: #00ffff; /* Ciano Elétrico */
+            --neon-accent: #ff9900; /* Laranja Vivo */
+            --bg-dark: #0f172a; /* Azul Escuro (Slate-900) */
+            --scanline-color: rgba(0, 0, 0, 0.2);
+        }
+
+        /* Estilo Base: Fundo Escuro, Fonte Retro e Efeito CRT/Scanline */
+        body {
+            background-color: var(--bg-dark);
+            color: #ccc;
+            font-family: 'VT323', monospace;
+            line-height: 1.25; /* Compacto, estilo display */
+            background-image: linear-gradient(to bottom, var(--scanline-color) 1px, transparent 1px);
+            background-size: 100% 4px;
+        }
+
+        /* Efeito de Néon no Texto Principal */
+        .neon-text-primary {
+            text-shadow: 0 0 5px var(--neon-blue), 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue);
+            color: var(--neon-blue);
+        }
+
+        /* Efeito de Néon no Texto de Acento */
+        .neon-text-accent {
+            text-shadow: 0 0 5px var(--neon-accent), 0 0 10px var(--neon-accent);
+            color: var(--neon-accent);
+        }
+
+        /* Efeito de Néon nos Botões (Fronteira 8-bit) */
+        .neon-btn {
+            border: 2px solid var(--neon-accent);
+            box-shadow: 0 0 5px var(--neon-accent), 0 0 10px var(--neon-accent);
+            transition: all 0.1s ease-in-out;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .neon-btn:hover {
+            background-color: var(--neon-accent);
+            color: var(--bg-dark);
+            box-shadow: 0 0 10px var(--neon-accent), 0 0 20px var(--neon-accent);
+            transform: scale(1.05);
+            cursor: pointer;
+        }
+
+        /* Efeito de Néon na "Janela" (Card) */
+        .neon-window {
+            border: 4px solid var(--neon-blue);
+            background: rgba(0, 0, 0, 0.5);
+            box-shadow: 0 0 8px var(--neon-blue), inset 0 0 8px var(--neon-blue);
+            border-radius: 0; /* Estilo 8-bit */
+        }
+        
+        /* Estilo para a barra de progresso 8-bit */
+        .skill-bar-container {
+            border: 2px solid var(--neon-accent);
+            background-color: #333;
+            height: 1.5rem;
+        }
+        .skill-bar-fill {
+            background-color: var(--neon-accent);
+            box-shadow: 0 0 4px var(--neon-accent);
+            height: 100%;
+            transition: width 1s ease-out;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="app" class="max-w-4xl mx-auto space-y-16">
+
+        <!-- 01 HERO (ACIMA DA DOBRA) -->
+        <header class="text-center pt-8 pb-12">
+            <h1 class="text-5xl md:text-7xl font-bold mb-4 neon-text-primary">
+                IA: O PRÓXIMO NÍVEL.
+            </h1>
+            <h2 class="text-2xl md:text-3xl text-white mb-8">
+                ALEXA NEO | ESTUDANTE DE MACHINE LEARNING EM ASCENSÃO.
+            </h2>
+            
+            <!-- Avatar Pixel Art Placeholder -->
+            <div class="mx-auto w-32 h-32 bg-gray-800 border-4 border-gray-600 mb-8 flex items-center justify-center text-4xl text-green-500 shadow-md">
+                🤖
+            </div>
+
+            <p class="text-xl md:text-2xl mb-12 text-gray-300">
+                Deep Learning, Visão Computacional e Modelagem Preditiva. Pronta para iniciar o Jogo!
+            </p>
+
+            <!-- CTA Principal -->
+            <a href="#levels" class="inline-block px-8 py-4 text-xl md:text-2xl text-black bg-yellow-400 font-extrabold shadow-lg shadow-yellow-400/50 hover:bg-yellow-300 transition-all duration-100">
+                START (VER PORTFÓLIO)
+            </a>
+        </header>
+
+        <!-- 02 "THE MISSION" (SOBRE MIM) -->
+        <section id="mission" class="neon-window p-6 md:p-10">
+            <h3 class="text-3xl md:text-4xl mb-6 neon-text-accent">
+                // THE MISSION
+            </h3>
+            <p class="text-lg mb-6 leading-relaxed">
+                Minha paixão por Inteligência Artificial é o código-fonte da minha jornada. Mergulho de cabeça em redes neurais e algoritmos complexos, buscando transformar dados brutos em soluções inovadoras. Estou em busca de um estágio onde possa aplicar o que aprendi e evoluir para a próxima fase.
+            </p>
+            <div class="border-t border-b border-dashed border-gray-600 py-4 mb-6">
+                <p class="text-xl neon-text-primary">
+                    <span class="neon-text-accent">MINHA PONTUAÇÃO ATUAL É:</span> 85% DE PROFICIÊNCIA EM PYTHON/ML.
+                </p>
+            </div>
+            <!-- CTA Secundário -->
+            <a href="#" class="neon-btn inline-block px-6 py-3 text-lg mt-4 text-white hover:text-black">
+                CONECTAR (LINKEDIN)
+            </a>
+        </section>
+
+        <!-- 03 "SKILLS TREE" (HABILIDADES) -->
+        <section id="skills" class="space-y-6">
+            <h3 class="text-3xl md:text-4xl text-center neon-text-primary">
+                << SKILLS TREE >>
+            </h3>
+            
+            <!-- Item da Skill: Python -->
+            <div class="p-4 bg-gray-900/70 border-2 border-gray-700">
+                <p class="text-xl mb-2 text-white">PYTHON (Proficiência - 90%)</p>
+                <div class="skill-bar-container">
+                    <div class="skill-bar-fill" style="width: 90%;"></div>
+                </div>
+            </div>
+
+            <!-- Item da Skill: Deep Learning (TensorFlow/PyTorch) -->
+            <div class="p-4 bg-gray-900/70 border-2 border-gray-700">
+                <p class="text-xl mb-2 text-white">DEEP LEARNING (Frameworks - 80%)</p>
+                <div class="skill-bar-container">
+                    <div class="skill-bar-fill" style="width: 80%;"></div>
+                </div>
+            </div>
+
+            <!-- Item da Skill: NLP (Processamento de Linguagem Natural) -->
+            <div class="p-4 bg-gray-900/70 border-2 border-gray-700">
+                <p class="text-xl mb-2 text-white">NLP / REINFORCEMENT LEARNING (Conceitos - 75%)</p>
+                <div class="skill-bar-container">
+                    <div class="skill-bar-fill" style="width: 75%;"></div>
+                </div>
+            </div>
+
+            <!-- Item da Skill: SQL/Databases -->
+            <div class="p-4 bg-gray-900/70 border-2 border-gray-700">
+                <p class="text-xl mb-2 text-white">SQL / DATABASES (Estrutura - 65%)</p>
+                <div class="skill-bar-container">
+                    <div class="skill-bar-fill" style="width: 65%;"></div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- 04 "MY LEVELS" (PROJETOS/PORTFÓLIO) -->
+        <section id="levels" class="space-y-8">
+            <h3 class="text-3xl md:text-4xl text-center neon-text-accent">
+                :: MY LEVELS (PROJETOS) ::
+            </h3>
+
+            <!-- Cartão de Projeto 1 -->
+            <div class="neon-window p-6">
+                <h4 class="text-2xl neon-text-accent mb-2">Project_01_CNN_Image_Rec.exe</h4>
+                <div class="text-lg mb-4">
+                    <span class="text-gray-400">// Descrição:</span> Sistema de reconhecimento de imagens utilizando Redes Neurais Convolucionais (CNNs).
+                    <br>
+                    <span class="text-gray-400">// Tech Stack:</span> TensorFlow, Python, OpenCV.
+                </div>
+                <div class="h-16 w-full bg-red-900 border-2 border-red-500 mb-4 flex items-center justify-center text-white">
+                    [Preview 8-bit do Classificador]
+                </div>
+                <a href="#" class="neon-btn inline-block px-4 py-2 text-sm text-white hover:text-black">
+                    DOWNLOAD CODE (GITHUB)
+                </a>
+            </div>
+
+            <!-- Cartão de Projeto 2 -->
+            <div class="neon-window p-6">
+                <h4 class="text-2xl neon-text-accent mb-2">Project_02_RNN_Chatbot_V3.asm</h4>
+                <div class="text-lg mb-4">
+                    <span class="text-gray-400">// Descrição:</span> Chatbot conversacional com arquitetura RNN/LSTM para melhor fluidez em diálogos.
+                    <br>
+                    <span class="text-gray-400">// Tech Stack:</span> PyTorch, NLTK, FastAPI.
+                </div>
+                <div class="h-16 w-full bg-green-900 border-2 border-green-500 mb-4 flex items-center justify-center text-white">
+                    [Preview 8-bit da Conversa]
+                </div>
+                <a href="#" class="neon-btn inline-block px-4 py-2 text-sm text-white hover:text-black">
+                    DOWNLOAD CODE (GITHUB)
+                </a>
+            </div>
+
+            <!-- Cartão de Projeto 3 -->
+            <div class="neon-window p-6">
+                <h4 class="text-2xl neon-text-accent mb-2">Project_03_RL_Pacman_Agent.dat</h4>
+                <div class="text-lg mb-4">
+                    <span class="text-gray-400">// Descrição:</span> Agente de Reinforcement Learning treinado para jogar uma versão de Pac-Man.
+                    <br>
+                    <span class="text-gray-400">// Tech Stack:</span> Gym (OpenAI), Q-Learning.
+                </div>
+                <div class="h-16 w-full bg-blue-900 border-2 border-blue-500 mb-4 flex items-center justify-center text-white">
+                    [Preview 8-bit do Agente em Ação]
+                </div>
+                <a href="#" class="neon-btn inline-block px-4 py-2 text-sm text-white hover:text-black">
+                    DOWNLOAD CODE (GITHUB)
+                </a>
+            </div>
+        </section>
+
+        <!-- 05 "ACHIEVEMENTS" (CONQUISTAS) -->
+        <section id="achievements" class="pt-8">
+            <h3 class="text-3xl md:text-4xl text-center neon-text-primary mb-8">
+                $ ACQUISITIONS / ACHIEVEMENTS $
+            </h3>
+            
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <!-- Conquista 1 -->
+                <div class="p-4 border-2 border-yellow-500 bg-black shadow-lg shadow-yellow-500/50">
+                    <div class="text-4xl mb-2">🏆</div>
+                    <p class="text-lg neon-text-accent">TROFÉU HACKATHON</p>
+                    <p class="text-sm">Vencedora - 1º Lugar (2024)</p>
+                </div>
+                <!-- Conquista 2 -->
+                <div class="p-4 border-2 border-yellow-500 bg-black shadow-lg shadow-yellow-500/50">
+                    <div class="text-4xl mb-2">🏅</div>
+                    <p class="text-lg neon-text-accent">CERT. DEEP LEARNING</p>
+                    <p class="text-sm">Stanford Online (98% Nota)</p>
+                </div>
+                <!-- Conquista 3 -->
+                <div class="p-4 border-2 border-yellow-500 bg-black shadow-lg shadow-yellow-500/50">
+                    <div class="text-4xl mb-2">🥇</div>
+                    <p class="text-lg neon-text-accent">CURSO PYTORCH</p>
+                    <p class="text-sm">100% Conclusão</p>
+                </div>
+                <!-- Conquista 4 -->
+                <div class="p-4 border-2 border-yellow-500 bg-black shadow-lg shadow-yellow-500/50">
+                    <div class="text-4xl mb-2">🌟</div>
+                    <p class="text-lg neon-text-accent">PREMIO Inovação</p>
+                    <p class="text-sm">Projeto CNN</p>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- 06 "GAME OVER? NO! CONTACT ME" (CONTATO) -->
+        <section id="contact" class="pt-12 pb-16">
+            <h3 class="text-3xl md:text-4xl text-center mb-8 neon-text-accent">
+                GAME OVER? NO! (CONNECT ME)
+            </h3>
+
+            <div class="neon-window p-6 md:p-10 max-w-lg mx-auto">
+                <p class="text-xl mb-6 text-white text-center">
+                    Garantia de resposta rápida para a "próxima fase" da colaboração. Insira os dados no terminal abaixo:
+                </p>
+
+                <form class="space-y-4">
+                    <!-- Campo Nome -->
+                    <div>
+                        <label for="name" class="block mb-1 text-lg neon-text-primary">>>> NAME:</label>
+                        <input type="text" id="name" class="w-full p-3 bg-black border-2 border-gray-600 text-white focus:border-neon-blue focus:ring-0" placeholder="Nome / Empresa" required>
+                    </div>
+                    <!-- Campo Email -->
+                    <div>
+                        <label for="email" class="block mb-1 text-lg neon-text-primary">>>> EMAIL:</label>
+                        <input type="email" id="email" class="w-full p-3 bg-black border-2 border-gray-600 text-white focus:border-neon-blue focus:ring-0" placeholder="user@domain.com" required>
+                    </div>
+                    <!-- Campo Mensagem -->
+                    <div>
+                        <label for="message" class="block mb-1 text-lg neon-text-primary">>>> MESSAGE:</label>
+                        <textarea id="message" rows="4" class="w-full p-3 bg-black border-2 border-gray-600 text-white focus:border-neon-blue focus:ring-0" placeholder="Descreva sua missão..." required></textarea>
+                    </div>
+                    
+                    <!-- CTA Final -->
+                    <div class="pt-4 text-center">
+                        <button type="submit" class="neon-btn inline-block px-8 py-4 text-2xl text-white hover:text-black w-full">
+                            SEND (ENVIAR MENSAGEM)
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- 07 FOOTER -->
+    <footer class="text-center pt-8 pb-4 border-t-2 border-dashed border-gray-700 mt-16">
+        <div class="flex justify-center space-x-6 mb-4">
+            <!-- Ícone LinkedIn -->
+            <a href="#" class="text-3xl text-white hover:text-neon-accent" title="LinkedIn">
+                <i data-lucide="linkedin" class="w-8 h-8"></i>
+            </a>
+            <!-- Ícone GitHub -->
+            <a href="#" class="text-3xl text-white hover:text-neon-accent" title="GitHub">
+                <i data-lucide="github" class="w-8 h-8"></i>
+            </a>
+            <!-- Ícone Email -->
+            <a href="#" class="text-3xl text-white hover:text-neon-accent" title="Email">
+                <i data-lucide="mail" class="w-8 h-8"></i>
+            </a>
+        </div>
+        <p class="text-sm text-gray-400">
+            &copy; 2024 ALEXA NEO. TODOS OS DIREITOS DE ALGORITMOS RESERVADOS.
+        </p>
+        <p class="text-sm neon-text-primary mt-1">
+            POWERED BY 🤖 / 💾 (ML)
+        </p>
+    </footer>
+
+    <script>
+        // JS para inicializar os ícones Lucide (SVGs)
+        lucide.createIcons();
+    </script>
+</body>
+</html>
