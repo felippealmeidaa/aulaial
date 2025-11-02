@@ -7,8 +7,7 @@
     <!-- Carregamento do Tailwind CSS e da Fonte Retro 'VT323' -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-    <!-- Ícones Lucide (emulando um visual minimalista/pixelado) -->
-    <script type="module" src="https://unpkg.com/lucide@latest"></script>
+    <!-- Ícones Lucide (Removido o import modular daqui para carregar na seção de script com import explícito) -->
 
     <style>
         /* Variáveis CSS para a Paleta Neon */
@@ -321,9 +320,11 @@
         </p>
     </footer>
 
-    <script>
+    <script type="module">
+        // Importa a função createIcons explicitamente, corrigindo o erro de referência.
+        import { createIcons } from 'https://unpkg.com/lucide@latest';
         // JS para inicializar os ícones Lucide (SVGs)
-        lucide.createIcons();
+        createIcons();
     </script>
 </body>
 </html>
