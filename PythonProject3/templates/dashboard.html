@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - IAUniev</title>
+
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
+
+    <!-- FullCalendar CSS -->
+    <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css' rel='stylesheet' />
+
+    <!-- Marked.js para Markdown -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Highlight.js para Syntax Highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+
+    <!-- CSS Principal -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- ============================================ -->
+    <!-- NAVBAR -->
+    <!-- ============================================ -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="logo">🤖</span>
+            <h2>IAUniev</h2>
+        </div>
+
+        <div class="nav-menu">
+            <a href="#" class="nav-link active" data-section="chat" onclick="showSection('chat', this)">
+                <span>💬</span> Chat IA
+            </a>
+            <a href="#" class="nav-link" data-section="comunidade" onclick="showSection('comunidade', this)">
+                <span>👥</span> Comunidade
+            </a>
+            <a href="#" class="nav-link" data-section="calendario" onclick="showSection('calendario', this)">
+                <span>📅</span> Calendário
+            </a>
+            <a href="#" class="nav-link" data-section="perfil" onclick="showSection('perfil', this)">
+                <span>👤</span> Meu Perfil
+            </a>
+
+            <!-- MODO ESCURO -->
+            <button class="nav-link dark-mode-toggle" onclick="toggleDarkMode()" title="Alternar modo escuro">
+                <span class="dark-icon">🌙</span>
+                <span class="light-icon" style="display:none;">☀️</span>
+                <span class="nav-text">Modo</span>
+            </button>
+
+            <!-- NOTIFICAÇÕES -->
+            <div class="notif-container">
+                <button class="notif-btn" onclick="toggleNotificacoes()" title="Notificações">
+                    🔔
+                    <span id="notif-badge" class="notif-badge" style="display: none;">0</span>
+                </button>
+                <div id="notif-dropdown" class="notif-dropdown" style="display: none;">
+                    <div class="notif-header">
+                        <h3>📬 Notificações</h3>
+                        <button onclick="marcarTodasLidas()" class="btn-mark-read">Marcar todas como lidas</button>
+                    </div>
+                    <div id="notif-list" class="notif-list">
+                        <div class="notif-empty">Carregando...</div>
+                    </div>
+                </div>
+            </div>
+
+            <a href="/logout" class="nav-link logout">
+                <span>🚪</span> Sair
+            </a>
+        </div>
+    </nav>
+
+    <!-- ============================================ -->
+    <!-- SEÇÃO: CHAT IA -->
+    <!-- ============================================ -->
+    <section id="chat" class="section active">
+        <div class="section-header">
+            <h1>💬 Chat com Assistente IA</h1>
+            <p>Tire suas dúvidas sobre o curso, materiais e muito mais!</p>
+        </div>
+
+        <div class="chat-container">
+            <div class="chat-messages" id="chatMessages">
+                <div class="message bot-message">
+                    <div class="message-content">
+                        <p>Olá, <strong>{{ nome }}</strong>! 😊</p>
+                        <p>Sou o assistente virtual da <strong>IAUniev</strong>. Como posso ajudar você hoje?</p>
+                        <p>Você pode me perguntar sobre:</p>
+                        <ul>
+                            <li>📚 Materiais de aula e conteúdos</li>
+                            <li>📝 Notas e faltas</li>
+                            <li>📅 Calendário acadêmico</li>
+                            <li>❓ Dúvidas sobre disciplinas</li>
+                            <li>🎯 E muito mais!</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-actions">
+                <button class="btn-action" onclick="carregarHistoricoChat()" title="Carregar histórico">
+                    📜 Histórico
+                </button>
+                <button class="btn-action" onclick="limparHistoricoChat()" title="Limpar conversa">
+                    🗑️ Limpar
+                </button>
+            </div>
+
+            <form id="chatForm" class="chat-input">
+                <label for="chatInput" style="display:none;">Mensagem do chat</label>
+                <input type="text" id="chatInput" placeholder="Digite sua mensagem..." required autocomplete="off">
+                <button type="submit" class="btn-send">
+                    ➤ Enviar
+                </button>
+            </form>
+        </div>
+    </section>
+
+    <!-- ============================================ -->
+    <!-- SEÇÃO: COMUNIDADE -->
+    <!-- ============================================ -->
+    <section id="comunidade" class="section">
+        <div class="section-header">
+            <h1>👥 Comunidade Acadêmica</h1>
+            <p>Conecte-se com outros estudantes, compartilhe projetos e tire dúvidas!</p>
+        </div>
+
+        <div class="comunidade-container">
+            <div class="curso-tabs">
+                <button class="curso-tab active" data-curso="ia" onclick="showCurso('ia', this)">
+                    🤖 Inteligência Artificial
+                </button>
+                <button class="curso-tab" data-curso="ads" onclick="showCurso('ads', this)">
+                    📊 Análise e Desenvolvimento
+                </button>
+                <button class="curso-tab" data-curso="es" onclick="showCurso('es', this)">
+                    ⚙️ Engenharia de Software
+                </button>
+            </div>
+
+            <!-- CURSO: INTELIGÊNCIA ARTIFICIAL -->
+            <div id="curso-ia" class="curso-content active">
+                <div class="curso-header">
+                    <h2>🤖 Inteligência Artificial</h2>
+                    <button class="btn-create-post" onclick="openCreatePostModal('ia')">
+                        ➕ Novo Post
+                    </button>
+                </div>
+
+                <!-- BARRA DE BUSCA E FILTROS - IA -->
+                <div class="search-filter-bar">
+                    <label for="searchPosts-ia" style="display:none;">Buscar posts</label>
+                    <input type="text" id="searchPosts-ia" class="search-input"
+                           placeholder="🔍 Buscar por título, conteúdo ou tags..."
+                           oninput="filtrarPosts()">
+                    <label for="filterTipo-ia" style="display:none;">Filtrar por tipo</label>
+                    <select id="filterTipo-ia" class="filter-select" onchange="filtrarPosts()">
+                        <option value="">Todos os tipos</option>
+                        <option value="projeto">📌 Projetos</option>
+                        <option value="duvida">❓ Dúvidas</option>
+                        <option value="discussao">💡 Discussões</option>
+                    </select>
+                </div>
+
+                <div class="community-grid">
+                    {% if posts_ia %}
+                        {% for post in posts_ia %}
+                        <div class="post-card" data-post-id="{{ post.post_id }}">
+                            <div class="post-header">
+                                <div class="user-info">
+                                    <div class="avatar">👨‍💻</div>
+                                    <div>
+                                        <h4>{{ post.nome_usuario }}</h4>
+                                        <span class="post-time">{{ post.data }}</span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span class="post-tag {{ post.tipo }}">
+                                        {% if post.tipo == 'projeto' %}📌 Projeto
+                                        {% elif post.tipo == 'duvida' %}❓ Dúvida
+                                        {% else %}💡 Discussão{% endif %}
+                                    </span>
+                                    {% if post.e_meu %}
+                                    <button class="btn-delete-post" onclick="deletePost(this, '{{ post.post_id }}')" title="Excluir post">
+                                        🗑️
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="post-content">
+                                <h3>{{ post.titulo }}</h3>
+                                <p>{{ post.conteudo }}</p>
+                                {% if post.tags %}
+                                <div class="post-tags">🏷️ {{ post.tags }}</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="post-footer">
+                                <button class="post-action like-btn" onclick="likePost(this)">
+                                    👍 <span class="like-count">0</span> curtidas
+                                </button>
+                                <button class="post-action comment-btn" onclick="toggleComments(this)">
+                                    💬 <span class="comment-count">0</span> comentários
+                                </button>
+                            </div>
+
+                            <div class="comments-section" style="display: none;">
+                                <div class="comments-list"></div>
+                                <div class="comment-input">
+                                    <label for="comment-field-{{ post.post_id }}" style="display:none;">Comentário</label>
+                                    <input type="text" id="comment-field-{{ post.post_id }}" class="comment-field" placeholder="Escreva um comentário...">
+                                    <button class="btn-comment" onclick="addComment(this)">Enviar</button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="no-posts">📭 Nenhum post ainda. Seja o primeiro a postar!</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- CURSO: ADS -->
+            <div id="curso-ads" class="curso-content">
+                <div class="curso-header">
+                    <h2>📊 Análise e Desenvolvimento de Sistemas</h2>
+                    <button class="btn-create-post" onclick="openCreatePostModal('ads')">
+                        ➕ Novo Post
+                    </button>
+                </div>
+
+                <div class="search-filter-bar">
+                    <label for="searchPosts-ads" style="display:none;">Buscar posts</label>
+                    <input type="text" id="searchPosts-ads" class="search-input"
+                           placeholder="🔍 Buscar por título, conteúdo ou tags..."
+                           oninput="filtrarPosts()">
+                    <label for="filterTipo-ads" style="display:none;">Filtrar por tipo</label>
+                    <select id="filterTipo-ads" class="filter-select" onchange="filtrarPosts()">
+                        <option value="">Todos os tipos</option>
+                        <option value="projeto">📌 Projetos</option>
+                        <option value="duvida">❓ Dúvidas</option>
+                        <option value="discussao">💡 Discussões</option>
+                    </select>
+                </div>
+
+                <div class="community-grid">
+                    {% if posts_ads %}
+                        {% for post in posts_ads %}
+                        <div class="post-card" data-post-id="{{ post.post_id }}">
+                            <div class="post-header">
+                                <div class="user-info">
+                                    <div class="avatar">📊</div>
+                                    <div>
+                                        <h4>{{ post.nome_usuario }}</h4>
+                                        <span class="post-time">{{ post.data }}</span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span class="post-tag {{ post.tipo }}">
+                                        {% if post.tipo == 'projeto' %}📌 Projeto
+                                        {% elif post.tipo == 'duvida' %}❓ Dúvida
+                                        {% else %}💡 Discussão{% endif %}
+                                    </span>
+                                    {% if post.e_meu %}
+                                    <button class="btn-delete-post" onclick="deletePost(this, '{{ post.post_id }}')" title="Excluir post">
+                                        🗑️
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="post-content">
+                                <h3>{{ post.titulo }}</h3>
+                                <p>{{ post.conteudo }}</p>
+                                {% if post.tags %}
+                                <div class="post-tags">🏷️ {{ post.tags }}</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="post-footer">
+                                <button class="post-action like-btn" onclick="likePost(this)">
+                                    👍 <span class="like-count">0</span> curtidas
+                                </button>
+                                <button class="post-action comment-btn" onclick="toggleComments(this)">
+                                    💬 <span class="comment-count">0</span> comentários
+                                </button>
+                            </div>
+
+                            <div class="comments-section" style="display: none;">
+                                <div class="comments-list"></div>
+                                <div class="comment-input">
+                                    <label for="comment-field-ads-{{ post.post_id }}" style="display:none;">Comentário</label>
+                                    <input type="text" id="comment-field-ads-{{ post.post_id }}" class="comment-field" placeholder="Escreva um comentário...">
+                                    <button class="btn-comment" onclick="addComment(this)">Enviar</button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="no-posts">📭 Nenhum post ainda. Seja o primeiro a postar!</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- CURSO: ES -->
+            <div id="curso-es" class="curso-content">
+                <div class="curso-header">
+                    <h2>⚙️ Engenharia de Software</h2>
+                    <button class="btn-create-post" onclick="openCreatePostModal('es')">
+                        ➕ Novo Post
+                    </button>
+                </div>
+
+                <div class="search-filter-bar">
+                    <label for="searchPosts-es" style="display:none;">Buscar posts</label>
+                    <input type="text" id="searchPosts-es" class="search-input"
+                           placeholder="🔍 Buscar por título, conteúdo ou tags..."
+                           oninput="filtrarPosts()">
+                    <label for="filterTipo-es" style="display:none;">Filtrar por tipo</label>
+                    <select id="filterTipo-es" class="filter-select" onchange="filtrarPosts()">
+                        <option value="">Todos os tipos</option>
+                        <option value="projeto">📌 Projetos</option>
+                        <option value="duvida">❓ Dúvidas</option>
+                        <option value="discussao">💡 Discussões</option>
+                    </select>
+                </div>
+
+                <div class="community-grid">
+                    {% if posts_es %}
+                        {% for post in posts_es %}
+                        <div class="post-card" data-post-id="{{ post.post_id }}">
+                            <div class="post-header">
+                                <div class="user-info">
+                                    <div class="avatar">⚙️</div>
+                                    <div>
+                                        <h4>{{ post.nome_usuario }}</h4>
+                                        <span class="post-time">{{ post.data }}</span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <span class="post-tag {{ post.tipo }}">
+                                        {% if post.tipo == 'projeto' %}📌 Projeto
+                                        {% elif post.tipo == 'duvida' %}❓ Dúvida
+                                        {% else %}💡 Discussão{% endif %}
+                                    </span>
+                                    {% if post.e_meu %}
+                                    <button class="btn-delete-post" onclick="deletePost(this, '{{ post.post_id }}')" title="Excluir post">
+                                        🗑️
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="post-content">
+                                <h3>{{ post.titulo }}</h3>
+                                <p>{{ post.conteudo }}</p>
+                                {% if post.tags %}
+                                <div class="post-tags">🏷️ {{ post.tags }}</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="post-footer">
+                                <button class="post-action like-btn" onclick="likePost(this)">
+                                    👍 <span class="like-count">0</span> curtidas
+                                </button>
+                                <button class="post-action comment-btn" onclick="toggleComments(this)">
+                                    💬 <span class="comment-count">0</span> comentários
+                                </button>
+                            </div>
+
+                            <div class="comments-section" style="display: none;">
+                                <div class="comments-list"></div>
+                                <div class="comment-input">
+                                    <label for="comment-field-es-{{ post.post_id }}" style="display:none;">Comentário</label>
+                                    <input type="text" id="comment-field-es-{{ post.post_id }}" class="comment-field" placeholder="Escreva um comentário...">
+                                    <button class="btn-comment" onclick="addComment(this)">Enviar</button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="no-posts">📭 Nenhum post ainda. Seja o primeiro a postar!</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================ -->
+    <!-- SEÇÃO: CALENDÁRIO -->
+    <!-- ============================================ -->
+    <section id="calendario" class="section">
+        <div class="section-header">
+            <h1>📅 Calendário Acadêmico</h1>
+            <p>Acompanhe eventos, provas e feriados</p>
+        </div>
+
+        <div class="calendario-container">
+            <div class="calendar-header">
+                <button class="btn-add-event" onclick="openEventModal()">
+                    ➕ Adicionar Evento Pessoal
+                </button>
+            </div>
+
+            <div id="calendar"></div>
+
+            <div class="calendar-legend">
+                <h3>📌 Legenda</h3>
+                <div class="legend-items">
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #dc3545;"></span>
+                        <span>Provas e Avaliações</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #e63946;"></span>
+                        <span>Feriados</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #4a90e2;"></span>
+                        <span>Eventos Acadêmicos</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #28a745;"></span>
+                        <span>Eventos Importantes</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-color" style="background: #ffc107;"></span>
+                        <span>Datas Comemorativas</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================ -->
+    <!-- SEÇÃO: MEU PERFIL -->
+    <!-- ============================================ -->
+    <section id="perfil" class="section">
+        <div class="section-header">
+            <h1>👤 Meu Perfil Acadêmico</h1>
+            <p>Visualize suas notas, faltas e horários</p>
+        </div>
+
+        <div class="perfil-container">
+            <div class="perfil-tabs">
+                <button class="perfil-tab active" data-tab="notas" onclick="showPerfilTab('notas', this)">
+                    📊 Notas
+                </button>
+                <button class="perfil-tab" data-tab="faltas" onclick="showPerfilTab('faltas', this)">
+                    📅 Faltas
+                </button>
+                <button class="perfil-tab" data-tab="horarios" onclick="showPerfilTab('horarios', this)">
+                    🕐 Horários
+                </button>
+            </div>
+
+            <!-- ABA: NOTAS -->
+            <div id="perfil-notas" class="perfil-content active">
+                <div class="perfil-header">
+                    <h2>📊 Minhas Notas</h2>
+
+                    <div class="export-buttons">
+                        <button onclick="exportarNotas('pdf')" class="btn-export">
+                            📄 Exportar PDF
+                        </button>
+                        <button onclick="exportarNotas('excel')" class="btn-export">
+                            📊 Exportar Excel
+                        </button>
+                    </div>
+                </div>
+
+                <div class="notas-grid">
+                    {% if notas %}
+                        {% for nota in notas %}
+                        <div class="disciplina-card">
+                            <h3>{{ nota.disciplina }}</h3>
+                            <div class="notas-detalhes">
+                                <div class="nota-item">
+                                    <span class="nota-label">VA1:</span>
+                                    <span class="nota-valor">{{ nota.va1 }}</span>
+                                </div>
+                                <div class="nota-item">
+                                    <span class="nota-label">VA2:</span>
+                                    <span class="nota-valor">{{ nota.va2 }}</span>
+                                </div>
+                                <div class="nota-item">
+                                    <span class="nota-label">VA3:</span>
+                                    <span class="nota-valor">{{ nota.va3 }}</span>
+                                </div>
+                                <div class="nota-item media">
+                                    <span class="nota-label">Média:</span>
+                                    <span class="nota-valor {% if nota.media >= 6.0 %}aprovado{% else %}reprovado{% endif %}">
+                                        {{ nota.media }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="situacao-badge {{ nota.situacao|lower }}">
+                                {{ nota.situacao }}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="no-data">📭 Nenhuma nota registrada ainda.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- ABA: FALTAS -->
+            <div id="perfil-faltas" class="perfil-content">
+                <h2>📅 Controle de Faltas</h2>
+
+                <div class="faltas-grid">
+                    {% if faltas %}
+                        {% for falta in faltas %}
+                        <div class="disciplina-card">
+                            <h3>{{ falta.disciplina }}</h3>
+                            <div class="faltas-detalhes">
+                                <div class="falta-item">
+                                    <span class="falta-label">Total de Faltas:</span>
+                                    <span class="falta-valor {% if falta.total_faltas > 12 %}alerta{% endif %}">
+                                        {{ falta.total_faltas }}
+                                    </span>
+                                </div>
+                                <div class="falta-item">
+                                    <span class="falta-label">Total de Aulas:</span>
+                                    <span class="falta-valor">{{ falta.total_aulas }}</span>
+                                </div>
+                                <div class="falta-item presenca">
+                                    <span class="falta-label">Presença:</span>
+                                    <span class="falta-valor {% if falta.percentual_presenca < 75 %}alerta{% endif %}">
+                                        {{ falta.percentual_presenca }}%
+                                    </span>
+                                </div>
+                            </div>
+                            {% if falta.percentual_presenca < 75 %}
+                            <div class="alerta-box">
+                                ⚠️ Atenção! Você está abaixo do limite de 75% de presença.
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="no-data">📭 Nenhum registro de faltas ainda.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- ABA: HORÁRIOS -->
+            <div id="perfil-horarios" class="perfil-content">
+                <h2>🕐 Horários de Aula - Semestre 2025.2</h2>
+
+                <div class="horarios-grid">
+                    {% for dia, aulas in horarios_aulas.items() %}
+                    <div class="dia-card">
+                        <h3>{{ dia }}</h3>
+                        <div class="aulas-lista">
+                            {% for aula in aulas %}
+                            <div class="aula-item">
+                                <div class="aula-horario">⏰ {{ aula.horario }}</div>
+                                <div class="aula-disciplina">📚 {{ aula.disciplina }}</div>
+                                <div class="aula-professor">👨‍🏫 {{ aula.professor }}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================ -->
+    <!-- MODAL: CRIAR POST -->
+    <!-- ============================================ -->
+    <div id="createPostModal" class="modal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeCreatePostModal()">×</span>
+            <h2>➕ Criar Novo Post</h2>
+            <p class="modal-subtitle">Compartilhe com <strong id="modalCursoName">a comunidade</strong></p>
+
+            <div class="modal-form">
+                <input type="hidden" id="postCurso">
+
+                <div class="modal-form-group">
+                    <label for="postTipo">Tipo de Post</label>
+                    <select id="postTipo" required>
+                        <option value="projeto">📌 Projeto</option>
+                        <option value="duvida">❓ Dúvida</option>
+                        <option value="discussao">💡 Discussão</option>
+                    </select>
+                </div>
+
+                <div class="modal-form-group">
+                    <label for="postTitulo">Título</label>
+                    <input type="text" id="postTitulo" placeholder="Digite o título..." required maxlength="100">
+                </div>
+
+                <div class="modal-form-group">
+                    <label for="postConteudo">Conteúdo</label>
+                    <textarea id="postConteudo" placeholder="Escreva o conteúdo do post..." required maxlength="1000" rows="6"></textarea>
+                </div>
+
+                <div class="modal-form-group">
+                    <label for="postTags">🏷️ Tags (separadas por vírgula)</label>
+                    <input type="text" id="postTags" placeholder="Ex: python, ia, machine-learning">
+                    <small style="color: var(--gray); font-size: 12px;">
+                        Tags ajudam outros alunos a encontrar seu post
+                    </small>
+                </div>
+
+                <div class="modal-actions">
+                    <button onclick="closeCreatePostModal()" class="modal-btn-cancel">Cancelar</button>
+                    <button onclick="createPost()" class="modal-btn-create">Publicar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- MODAL: CRIAR EVENTO (COM SELETOR DE 8 CORES) -->
+    <!-- ============================================ -->
+    <div id="eventModal" class="modal">
+        <div class="modal-evento-content">
+            <span class="modal-close" onclick="closeEventModal()">×</span>
+            <h2>📅 Adicionar Evento Pessoal</h2>
+
+            <div class="modal-form">
+                <div class="modal-form-group">
+                    <label for="eventoTitulo">Título do Evento</label>
+                    <input type="text" id="eventoTitulo" placeholder="Ex: Estudar para prova de IA" required>
+                </div>
+
+                <div class="modal-form-group">
+                    <label for="eventoDescricao">Descrição (opcional)</label>
+                    <textarea id="eventoDescricao" placeholder="Detalhes do evento..." rows="3"></textarea>
+                </div>
+
+                <div class="modal-form-row">
+                    <div class="modal-form-group">
+                        <label for="eventoData">Data</label>
+                        <input type="date" id="eventoData" required>
+                    </div>
+
+                    <div class="modal-form-group">
+                        <label for="eventoHora">Hora (opcional)</label>
+                        <input type="time" id="eventoHora">
+                    </div>
+                </div>
+
+                <div class="modal-form-group">
+                    <label for="eventoTipo">Tipo de Evento</label>
+                    <select id="eventoTipo">
+                        <option value="pessoal">📝 Pessoal</option>
+                        <option value="estudo">📚 Estudo</option>
+                        <option value="trabalho">💼 Trabalho</option>
+                        <option value="lazer">🎮 Lazer</option>
+                    </select>
+                </div>
+
+                <!-- SELETOR DE CORES - ATUALIZADO COM 8 CORES -->
+                <div class="modal-form-group">
+                    <label>Cor do Evento</label>
+                    <div class="color-picker">
+                        <div class="color-option selected" data-color="#4a90e2" onclick="selectColor(this)" title="Azul"></div>
+                        <div class="color-option" data-color="#e74c3c" onclick="selectColor(this)" title="Vermelho"></div>
+                        <div class="color-option" data-color="#2ecc71" onclick="selectColor(this)" title="Verde"></div>
+                        <div class="color-option" data-color="#f39c12" onclick="selectColor(this)" title="Laranja"></div>
+                        <div class="color-option" data-color="#9b59b6" onclick="selectColor(this)" title="Roxo"></div>
+                        <div class="color-option" data-color="#1abc9c" onclick="selectColor(this)" title="Turquesa"></div>
+                        <div class="color-option" data-color="#e91e63" onclick="selectColor(this)" title="Rosa"></div>
+                        <div class="color-option" data-color="#34495e" onclick="selectColor(this)" title="Cinza"></div>
+                    </div>
+                </div>
+
+                <div class="modal-form-group">
+                    <label for="eventoAlerta">
+                        <input type="checkbox" id="eventoAlerta" onchange="toggleAlertaMinutos()">
+                        Ativar alerta
+                    </label>
+                </div>
+
+                <div id="alertaMinutosGroup" class="modal-form-group" style="display: none;">
+                    <label for="alertaMinutos">Minutos antes do alerta</label>
+                    <input type="number" id="alertaMinutos" value="30" min="1" max="1440">
+                </div>
+
+                <div class="modal-actions">
+                    <button onclick="closeEventModal()" class="modal-btn-cancel">Cancelar</button>
+                    <button onclick="createEvent()" id="btnCreateEvent" class="modal-btn-create">Criar Evento</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- SCRIPTS -->
+    <!-- ============================================ -->
+
+    <!-- FullCalendar JS -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+
+    <!-- Script para passar dark_mode do backend -->
+    <script>
+        const darkMode = {{ dark_mode }};
+    </script>
+
+    <!-- Script principal -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

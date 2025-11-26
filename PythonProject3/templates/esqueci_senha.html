@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IAUniev - Recuperar Senha</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="login-box">
+            <div class="logo">
+                <h1>IAUniev</h1>
+                <p>🔑 Recuperação de Acesso</p>
+            </div>
+
+            <form action="/esqueci-senha" method="POST">
+                <h2>Esqueci minha senha</h2>
+                <p style="text-align: center; color: #6c757d; margin-bottom: 20px;">
+                    Digite seu e-mail cadastrado e enviaremos um link para você redefinir sua senha.
+                </p>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert {{ category }}" style="
+                                padding: 14px;
+                                border-radius: 12px;
+                                margin-bottom: 25px;
+                                font-weight: bold;
+                                background: {{ '#d4edda' if category == 'success' else '#f8d7da' }};
+                                color: {{ '#155724' if category == 'success' else '#721c24' }};
+                                border-left: 5px solid {{ '#28a745' if category == 'success' else '#dc3545' }};">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <div class="form-group">
+                    <label for="email">📧 E-mail cadastrado</label>
+                    <input type="email" id="email" name="email" required
+                           placeholder="seu.email@aluno.unievangelica.edu.br">
+                </div>
+
+                <button type="submit" class="btn-primary">Enviar Link de Recuperação 📩</button>
+
+                <div class="form-footer">
+                    <p><a href="/">← Voltar para o Login</a></p>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

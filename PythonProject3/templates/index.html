@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IAUniev - Login</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="login-box">
+            <div class="logo">
+                <div style="display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 1rem;">
+                    <span style="font-size: 3rem; animation: float 3s ease-in-out infinite;">🤖</span>
+                    <h1 style="margin: 0;">IAUniev</h1>
+                </div>
+                <p>🚀 Assistente Virtual Acadêmico - IA</p>
+            </div>
+
+            <form id="loginForm" action="/login" method="POST">
+                <h2>🔐 Olá, seja bem-vindo!</h2>
+
+                {% if erro %}
+                <div class="erro-mensagem">
+                    ⚠️ {{ erro }}
+                </div>
+                {% endif %}
+
+                {% if sucesso %}
+                <div class="sucesso-mensagem" style="background: #d4edda; color: #155724; padding: 14px; border-radius: 12px; margin-bottom: 25px; border-left: 5px solid #28a745;">
+                    ✅ {{ sucesso }}
+                </div>
+                {% endif %}
+
+                <div class="form-group">
+                    <label for="login">📧 E-mail ou Matrícula</label>
+                    <input type="text" id="login" name="login" required
+                           placeholder="Digite seu e-mail ou matrícula">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">🔑 Senha</label>
+                    <input type="password" id="password" name="password" required
+                           placeholder="Digite sua senha">
+                    <div style="text-align: right; margin-top: 5px;">
+                        <a href="/esqueci-senha" style="font-size: 13px; color: #667eea; text-decoration: none;">Esqueci minha senha</a>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary">Entrar →</button>
+
+                <div class="form-footer">
+                    <p>Novo por aqui? <a href="/cadastro">Cadastre-se agora! 🎓</a></p>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

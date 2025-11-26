@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sincronizando... - IAUniev</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0056b3 0%, #003d82 100%);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        /* Fundo animado suave */
+        body::before {
+            content: '';
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 30px 30px;
+            animation: moveBackground 60s linear infinite;
+            z-index: 0;
+        }
+
+        @keyframes moveBackground {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loader-container {
+            position: relative;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 50px;
+            border-radius: 20px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+            max-width: 400px;
+            width: 90%;
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .robot-icon {
+            font-size: 60px;
+            margin-bottom: 20px;
+            display: inline-block;
+            animation: bounce 2s infinite ease-in-out;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+
+        h2 {
+            margin: 10px 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        p {
+            color: rgba(255,255,255,0.8);
+            font-size: 16px;
+            margin-bottom: 30px;
+        }
+
+        /* Barra de progresso indeterminada */
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-value {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 50%;
+            background: #20c997; /* Verde bonito */
+            border-radius: 3px;
+            animation: loading 1.5s infinite ease-in-out;
+            transform-origin: left;
+        }
+
+        @keyframes loading {
+            0% { left: -50%; width: 30%; }
+            50% { width: 60%; }
+            100% { left: 100%; width: 10%; }
+        }
+
+        .steps {
+            margin-top: 20px;
+            font-size: 13px;
+            color: rgba(255,255,255,0.6);
+            height: 20px; /* Altura fixa para não pular */
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="loader-container">
+        <div class="robot-icon">🤖</div>
+        <h2>Sincronizando AVA</h2>
+        <p>Estamos buscando suas notas e aulas mais recentes...</p>
+
+        <div class="progress-bar">
+            <div class="progress-value"></div>
+        </div>
+
+        <div class="steps" id="status-text">Conectando ao servidor...</div>
+    </div>
+
+    <script>
+        const statusText = document.getElementById('status-text');
+        const messages = [
+            "Acessando portal do aluno...",
+            "Lendo quadro de notas...",
+            "Baixando conteúdo das aulas...",
+            "Organizando banco de dados...",
+            "Quase pronto..."
+        ];
+
+        let msgIndex = 0;
+
+        // Troca a mensagem a cada 3 segundos para dar sensação de progresso
+        setInterval(() => {
+            msgIndex = (msgIndex + 1) % messages.length;
+            statusText.textContent = messages[msgIndex];
+        }, 3000);
+
+        // POLLLING: Verifica o status no servidor a cada 1.5 segundos
+        const checkStatus = setInterval(async () => {
+            try {
+                const response = await fetch('/api/checar_status_sync');
+                const data = await response.json();
+
+                console.log("Status:", data.status);
+
+                if (data.status === 'concluido') {
+                    clearInterval(checkStatus);
+                    statusText.textContent = "✅ Tudo pronto! Entrando...";
+                    // Pequeno delay para o usuário ver o sucesso
+                    setTimeout(() => {
+                        window.location.href = "/dashboard";
+                    }, 800);
+                }
+                else if (data.status === 'erro') {
+                    clearInterval(checkStatus);
+                    statusText.textContent = "⚠️ Houve um erro, mas vamos entrar assim mesmo.";
+                    setTimeout(() => {
+                        window.location.href = "/dashboard";
+                    }, 2000);
+                }
+                // Se for 'iniciando' ou 'em_andamento', continua o loop
+            } catch (error) {
+                console.error("Erro na verificação:", error);
+            }
+        }, 1500);
+    </script>
+</body>
+</html>

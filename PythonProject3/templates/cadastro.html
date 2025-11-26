@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IAUniev - Cadastro</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="login-box">
+            <div class="logo">
+                <h1>IAUniev</h1>
+                <p>🚀 Assistente Virtual Acadêmico - IA</p>
+            </div>
+
+            <form id="cadastroForm" action="/cadastro" method="POST">
+                <h2>✨ Crie sua conta</h2>
+
+                {% if erro %}
+                <div class="erro-mensagem">
+                    ⚠️ {{ erro }}
+                </div>
+                {% endif %}
+
+                <div class="form-group">
+                    <label for="nome">👤 Nome Completo</label>
+                    <input type="text" id="nome" name="nome" required
+                           placeholder="Digite seu nome completo">
+                </div>
+
+                <div class="form-group">
+                    <label for="matricula">🎫 Matrícula</label>
+                    <input type="text" id="matricula" name="matricula" required
+                           placeholder="Digite sua matrícula (apenas números)"
+                           pattern="[0-9]+"
+                           title="Digite apenas números"
+                           inputmode="numeric">
+                    <small style="color: #6c757d; font-size: 12px; margin-top: 5px; display: block;">
+                        ⚠️ Apenas números são permitidos
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="cpf">📄 CPF (Somente Números)</label>
+                    <input type="text" id="cpf" name="cpf" required
+                           placeholder="Digite seu CPF"
+                           pattern="\d{11}"
+                           title="Digite os 11 números do CPF"
+                           maxlength="11">
+                    <small style="color: #6c757d; font-size: 11px; margin-top: 5px; display: block;">
+                        ℹ️ Necessário para sincronizar com o AVA (Senha: 7 primeiros dígitos).
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="email">📧 E-mail Institucional</label>
+                    <input type="email" id="email" name="email" required
+                           placeholder="seu.nome@aluno.unievangelica.edu.br">
+                </div>
+
+                <div class="form-group">
+                    <label for="curso">📚 Curso</label>
+                    <select id="curso" name="curso" required>
+                        <option value="">Selecione seu curso</option>
+                        <option value="Inteligência Artificial">Inteligência Artificial</option>
+                        <option value="Análise e Desenvolvimento de Sistemas">Análise e Desenvolvimento de Sistemas</option>
+                        <option value="Engenharia de Software">Engenharia de Software</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">🔑 Senha</label>
+                    <input type="password" id="password" name="password" required
+                           placeholder="Digite uma senha segura">
+                </div>
+
+                <div class="form-group">
+                    <label for="confirm_password">✅ Confirmar Senha</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required
+                           placeholder="Confirme sua senha">
+                </div>
+
+                <button type="submit" class="btn-primary">Cadastrar →</button>
+
+                <div class="form-footer">
+                    <p>Já tem uma conta? <a href="/">Faça login aqui! 🔓</a></p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Validação do formulário
+        document.getElementById('cadastroForm').addEventListener('submit', function(e) {
+            const senha = document.getElementById('password').value;
+            const confirmSenha = document.getElementById('confirm_password').value;
+            const matricula = document.getElementById('matricula').value;
+            const cpf = document.getElementById('cpf').value;
+
+            // Validar senhas
+            if (senha !== confirmSenha) {
+                e.preventDefault();
+                alert('⚠️ As senhas não coincidem!');
+                return;
+            }
+
+            // Validar matrícula (apenas números)
+            if (!/^\d+$/.test(matricula)) {
+                e.preventDefault();
+                alert('⚠️ A matrícula deve conter apenas números!');
+                return;
+            }
+
+            // Validar CPF (11 dígitos)
+            if (!/^\d{11}$/.test(cpf)) {
+                e.preventDefault();
+                alert('⚠️ O CPF deve conter exatamente 11 números!');
+                return;
+            }
+        });
+
+        // Bloquear entrada de letras em campos numéricos
+        ['matricula', 'cpf'].forEach(function(id) {
+            document.getElementById(id).addEventListener('input', function(e) {
+                this.value = this.value.replace(/[^0-9]/g, '');
+            });
+        });
+    </script>
+</body>
+</html>
