@@ -1,0 +1,9 @@
+2025-11-25 20:36:24,955 - werkzeug - WARNING -  * Debugger is active!
+2025-11-25 20:36:24,959 - werkzeug - INFO -  * Debugger PIN: 133-232-051
+2025-11-25 20:38:49,020 - werkzeug - INFO -  * Detected change in 'C:\\Users\\felip\\PycharmProjects\\PythonProject3\\app.py', reloading
+2025-11-25 20:38:50,412 - werkzeug - WARNING -  * Debugger is active!
+2025-11-25 20:38:50,413 - werkzeug - INFO -  * Debugger PIN: 133-232-051
+2025-11-25 20:39:06,820 - werkzeug - INFO -  * Detected change in 'C:\\Users\\felip\\PycharmProjects\\PythonProject3\\.venv\\Lib\\site-packages\\werkzeug\\sansio\\request.py', reloading
+2025-11-25 20:39:09,472 - werkzeug - WARNING -  * Debugger is active!
+2025-11-25 20:39:09,475 - werkzeug - INFO -  * Debugger PIN: 133-232-051
+2025-11-25 20:39:10,562 - werkzeug - INFO -  * Detected change in 'C:\\Users\\felip\\PycharmProjects\\PythonProject3\\.venv\\Lib\\site-packages\\dotenv\\parser.py', reloading
