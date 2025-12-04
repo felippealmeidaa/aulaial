@@ -251,27 +251,68 @@ def extrair_notas(driver):
                         }
 
             # Procurar por padrão de verificação de aprendizagem
+            # Formato: "DD/MM/YYYY - Xª Verificação De Aprendizagem"
             match_verificacao = re.search(r'(\d{1,2}/\d{1,2}/\d{4})\s*-\s*(\d)[ªa]\s*Verificação', linha, re.IGNORECASE)
 
-            if match_verificacao and disciplina_atual:
+            if match_verificacao:
                 num_va = match_verificacao.group(2)
                 tipo_va = f"VA{num_va}"
 
-                # Procurar a nota nas próximas linhas (até 20 linhas à frente) e também inline
+                # IMPORTANTE: Procurar a disciplina PARA TRÁS a partir desta linha
+                # No Lyceum, cada entrada de nota tem a disciplina logo acima da linha de VA
+                disciplina_encontrada = None
+                for k in range(i - 1, max(0, i - 5), -1):
+                    linha_anterior = linhas[k].strip()
+                    if any(p in linha_anterior.upper() for p in ['FUNDAMENTOS', 'COMPUTAÇÃO', 'ENGENHARIA', 'INTRODUÇÃO', 'ALGORITMOS', 'CIDADANIA', 'LEITURA', 'MATEMÁTIC', 'ÉTICA', 'ESPIRITUALIDADE', 'INTERPRETAÇÃO', 'SOLUÇÕES', 'INFRAESTRUTURA', 'DADOS']):
+                        # Verificar que não é uma linha de VA ou outros headers
+                        if not re.search(r'\d{1,2}/\d{1,2}/\d{4}', linha_anterior) and 'verificação' not in linha_anterior.lower():
+                            disciplina_encontrada = limpar_texto(linha_anterior)
+                            break
+
+                # Se encontrou disciplina para trás, usar ela; senão usar a atual
+                if disciplina_encontrada:
+                    disciplina_atual = disciplina_encontrada
+
+                if not disciplina_atual:
+                    i += 1
+                    continue
+
+                # IMPORTANTE: NÃO extrair nota da mesma linha (contém data que confunde o regex)
+                # Procurar a nota nas PRÓXIMAS linhas apenas
                 nota_valor = None
-                # Inline na mesma linha
-                inline = re.search(r'(\d{1,3}(?:[.,]\d+)?)', linha)
-                if inline:
-                    nota_valor = float(inline.group(1).replace(',', '.'))
-                # Mais linhas à frente
-                if nota_valor is None:
-                    for j in range(1, 21):
-                        if i + j < len(linhas):
-                            linha_nota = linhas[i + j].strip()
-                            match_nota = re.search(r'(\d{1,3}(?:[.,]\d+)?)', linha_nota)
-                            if match_nota:
-                                nota_valor = float(match_nota.group(1).replace(',', '.'))
+
+                # Procurar nas próximas linhas por um número standalone (a nota)
+                for j in range(1, 10):
+                    if i + j < len(linhas):
+                        linha_nota = linhas[i + j].strip()
+
+                        # Pular linhas que contêm texto irrelevante
+                        if any(skip in linha_nota.lower() for skip in ['verificação', 'gráfico', 'aprendizagem']):
+                            continue
+
+                        # Pular a linha "Nota" (é um label, não um número)
+                        if linha_nota.lower() == 'nota':
+                            continue
+
+                        # Se encontrar "/" significa que é uma data (nova entrada) - parar
+                        if '/' in linha_nota:
+                            break
+
+                        # Pular se a linha for uma disciplina (nova entrada)
+                        if any(p in linha_nota.upper() for p in ['FUNDAMENTOS', 'COMPUTAÇÃO', 'ENGENHARIA', 'INTRODUÇÃO', 'ALGORITMOS', 'CIDADANIA', 'LEITURA', 'MATEMÁTIC', 'ÉTICA']):
+                            break
+
+                        # Procurar número standalone (a nota é geralmente um número sozinho na linha)
+                        # O número deve ser entre 0 e 100
+                        match_nota = re.match(r'^(\d{1,3}(?:[.,]\d+)?)$', linha_nota)
+                        if match_nota:
+                            val = float(match_nota.group(1).replace(',', '.'))
+                            # Validar que é um valor de nota plausível (0-100)
+                            if 0 <= val <= 100:
+                                nota_valor = val
                                 break
+
+                # Converter nota de escala 0-100 para 0-10
                 if nota_valor is not None:
                     if nota_valor > 10:
                         nota_valor = round(nota_valor / 10, 1)
@@ -302,28 +343,39 @@ def extrair_notas(driver):
 
                     print(f"      ✓ {disciplina_atual} - {tipo_va}: {nota_valor}")
 
-            # Detecção adicional de VA sem data
-            if disciplina_atual:
+            # Detecção adicional de VA sem data completa (apenas "VA1", "VA2", etc.)
+            # Este bloco é um fallback para formatos alternativos
+            if disciplina_atual and not match_verificacao:
                 va_match = re.search(r'\bVA\s*([123])\b', linha, re.IGNORECASE)
-                if not va_match:
-                    va_match = re.search(r'(\d)[ªa]\s*Verificação', linha, re.IGNORECASE)
                 if va_match:
                     num_va2 = va_match.group(1)
                     tipo_va2 = f"VA{num_va2}"
                     nota_valor2 = None
-                    inline_match = re.search(r'(\d{1,3}(?:[.,]\d+)?)', linha)
-                    if inline_match:
-                        nota_valor2 = float(inline_match.group(1).replace(',', '.'))
-                    if nota_valor2 is None:
-                        for j in range(1, 21):
-                            if i + j < len(linhas):
-                                ln = linhas[i + j].strip()
-                                m2 = re.search(r'(\d{1,3}(?:[.,]\d+)?)', ln)
-                                if m2:
-                                    nota_valor2 = float(m2.group(1).replace(',', '.'))
+
+                    # Procurar nota nas próximas linhas (não na mesma linha)
+                    for j in range(1, 10):
+                        if i + j < len(linhas):
+                            ln = linhas[i + j].strip()
+
+                            # Pular linhas não-numéricas ou que contêm texto irrelevante
+                            if any(skip in ln.lower() for skip in ['verificação', 'nota', 'gráfico', 'aprendizagem', '/']):
+                                continue
+
+                            # Pular se encontrar nova disciplina
+                            if any(p in ln.upper() for p in ['FUNDAMENTOS', 'COMPUTAÇÃO', 'ENGENHARIA', 'INTRODUÇÃO', 'ALGORITMOS', 'CIDADANIA', 'LEITURA']):
+                                break
+
+                            # Procurar número standalone
+                            m2 = re.match(r'^(\d{1,3}(?:[.,]\d+)?)$', ln)
+                            if m2:
+                                val = float(m2.group(1).replace(',', '.'))
+                                if 0 <= val <= 100:
+                                    nota_valor2 = val
                                     break
+
                     if nota_valor2 is not None and nota_valor2 > 10:
                         nota_valor2 = round(nota_valor2 / 10, 1)
+
                     if nota_valor2 is not None:
                         disc_key2 = normalizar_disciplina(disciplina_atual)
                         if disc_key2 not in dados_notas:
@@ -361,6 +413,23 @@ def extrair_notas(driver):
 
         resultado = list(dados_notas.values())
 
+        # VALIDAÇÃO: Verificar se os dados fazem sentido
+        print(f"\n   📊 VALIDAÇÃO DOS DADOS EXTRAÍDOS:")
+        for nota in resultado:
+            # Notas devem estar entre 0 e 10
+            for va in ['va1', 'va2', 'va3']:
+                if nota[va] < 0 or nota[va] > 10:
+                    print(f"      ⚠️ ALERTA: {nota['disciplina']} tem {va.upper()}={nota[va]} fora do range 0-10")
+                    # Corrigir valores fora do range
+                    nota[va] = max(0, min(10, nota[va]))
+
+            # Média deve ser coerente
+            soma_calc = nota['va1'] + nota['va2'] + nota['va3']
+            media_calc = round(soma_calc / 3, 1)
+            if nota['media'] != media_calc:
+                print(f"      ⚠️ ALERTA: Média inconsistente para {nota['disciplina']}: {nota['media']} vs calculado {media_calc}")
+                nota['media'] = media_calc
+
         print(f"\n   📊 Total de disciplinas com notas: {len(resultado)}")
         for nota in resultado:
             print(f"      • {nota['disciplina']}: VA1={nota['va1']}, VA2={nota['va2']}, VA3={nota['va3']}, Média={nota['media']}, {nota['situacao']}")
@@ -374,24 +443,40 @@ def extrair_notas(driver):
 
 
 # ============================================
-# EXTRAIR FREQUÊNCIA - V12.0 COM JAVASCRIPT SCROLL
+# EXTRAIR FREQUÊNCIA - V13.0 COM PARSING ROBUSTO
 # ============================================
 def extrair_frequencia(driver):
     """
     Extrai frequência da página: Avaliação > Frequência
     URL: https://portal.unievangelica.edu.br/aluno/#/home/frequencia
 
-    Usa JavaScript para forçar scroll e carregar todo o conteúdo
+    Formato esperado do Lyceum:
+    DISCIPLINA_NAME (header em azul)
+    Faltas                    X
+    Frequência (%)            Y.YY
+
+    IMPORTANTE: Parsing line-by-line para evitar confusão de valores
     """
-    print("\n📅 [LYCEUM] Extraindo FREQUÊNCIA (V12.0)...")
+    print("\n📅 [LYCEUM] Extraindo FREQUÊNCIA (V13.0)...")
     dados_faltas = {}
 
+    # Termos do menu/header que NÃO são disciplinas
     IGNORAR_TERMOS = [
-        'AVALIAÇÃO', 'FREQUÊNCIA', 'FALTAS', 'DISCIPLINA',
+        'AVALIAÇÃO', 'FREQUÊNCIA (%)', 'FALTAS', 'DISCIPLINA',
         'INTELIGÊNCIA ARTIFICIAL', 'RA:', 'SÉRIE', 'PERÍODO',
         'TURMA', 'STATUS', 'CALENDÁRIO', 'CADASTRO', 'SECRETARIA',
         'FINANCEIRO', 'BIBLIOTECA', 'IDIOMA', 'SAIR', 'AVISO',
-        'NOTAS', 'FELIPPE', 'ALMEIDA', 'RODRIGUES', 'AVALIAÇÃO INSTITUCIONAL'
+        'NOTAS', 'AVALIAÇÃO INSTITUCIONAL', 'UNIEVANGELICA',
+        'UNIVERSIDADE EVANGÉLICA', 'FELIPPE', 'ALMEIDA', 'RODRIGUES'
+    ]
+
+    # Palavras-chave que identificam disciplinas reais
+    PALAVRAS_DISCIPLINA = [
+        'FUNDAMENTOS', 'COMPUTAÇÃO', 'ENGENHARIA', 'INTRODUÇÃO',
+        'ALGORITMOS', 'PROGRAMAÇÃO', 'MATEMÁTIC', 'CIDADANIA',
+        'ÉTICA', 'ESPIRITUALIDADE', 'LEITURA', 'INTERPRETAÇÃO',
+        'TEXTO', 'DADOS', 'INFRAESTRUTURA', 'SOLUÇÕES', 'ON-LINE',
+        'ONLINE', 'MATEMÁTICA'
     ]
 
     try:
@@ -400,10 +485,8 @@ def extrair_frequencia(driver):
 
         print(f"   URL: {driver.current_url}")
 
-        # SCROLL FORÇADO com JavaScript - mais agressivo
-        # Scroll até o final várias vezes para forçar lazy loading
+        # SCROLL agressivo para carregar todo o conteúdo
         for scroll_attempt in range(15):
-            # Scroll suave até o final
             driver.execute_script("""
                 window.scrollTo({
                     top: document.body.scrollHeight,
@@ -411,19 +494,13 @@ def extrair_frequencia(driver):
                 });
             """)
             time.sleep(0.8)
-
-            # Scroll instantâneo
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(0.5)
 
-        # Aguardar carregamento
         time.sleep(3)
-
-        # Voltar ao topo
         driver.execute_script("window.scrollTo(0, 0);")
         time.sleep(1)
 
-        # Scroll de novo para garantir
         for _ in range(5):
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(1)
@@ -432,97 +509,169 @@ def extrair_frequencia(driver):
 
         print(f"   Tamanho do texto: {len(body_text)} caracteres")
 
-        # Debug
+        # Debug - mostrar conteúdo
         print("   === CONTEÚDO DA PÁGINA DE FREQUÊNCIA ===")
         print(body_text[:5000])
         print("   === FIM ===")
 
         def is_disciplina_valida(texto):
+            """Verifica se o texto é um nome de disciplina válido"""
             texto_upper = texto.upper().strip()
+
+            # Muito curto não é disciplina
             if len(texto_upper) < 10:
                 return False
+
+            # Verificar se contém termos do menu/header
             for termo in IGNORAR_TERMOS:
-                if termo in texto_upper:
+                if termo in texto_upper and not any(p in texto_upper for p in PALAVRAS_DISCIPLINA):
                     return False
+
+            # Linhas que começam com código numérico não são disciplinas
             if re.match(r'^\d{4}\s*-', texto_upper):
                 return False
-            # Lista expandida de palavras-chave para disciplinas
-            palavras = ['FUNDAMENTOS', 'COMPUTAÇÃO', 'ENGENHARIA', 'INTRODUÇÃO',
-                       'ALGORITMOS', 'PROGRAMAÇÃO', 'MATEMÁTIC', 'CIDADANIA',
-                       'ÉTICA', 'ESPIRITUALIDADE', 'LEITURA', 'INTERPRETAÇÃO',
-                       'TEXTO', 'DADOS', 'INFRAESTRUTURA', 'SOLUÇÕES', 'ON-LINE',
-                       'ONLINE', 'ALGORITMO', 'PROGRAMA', 'MATEMÁTICA']
-            return any(p in texto_upper for p in palavras)
+
+            # Deve conter pelo menos uma palavra-chave de disciplina
+            return any(p in texto_upper for p in PALAVRAS_DISCIPLINA)
 
         linhas = body_text.split('\n')
         linhas = [l.strip() for l in linhas if l.strip()]
 
-        def eh_header(texto: str) -> bool:
-            t = texto.strip()
-            return t.upper() == 'TOTAL' or (len(t) > 10 and is_disciplina_valida(t))
-
+        # Estratégia: Procurar padrões "Faltas" seguido de número na próxima linha
+        # e associar com a disciplina mais próxima acima
         i = 0
+        disciplina_atual = None
+
         while i < len(linhas):
             linha = linhas[i]
-            if not eh_header(linha):
+            linha_upper = linha.upper().strip()
+
+            # Detectar header de disciplina
+            if is_disciplina_valida(linha) or linha_upper == 'TOTAL':
+                disciplina_atual = limpar_texto(linha)
                 i += 1
                 continue
 
-            disciplina = limpar_texto(linha)
-            disc_key = normalizar_disciplina(disciplina)
+            # Detectar linha "Faltas"
+            if linha_upper == 'FALTAS' and disciplina_atual:
+                # A próxima linha deve ser o número de faltas
+                faltas = 0
+                freq = 100.0
 
-            # Definir bloco até próximo header
-            j = i + 1
-            while j < len(linhas) and not eh_header(linhas[j]):
-                j += 1
-            bloco = linhas[i:j]
-            bloco_texto = "\n".join(bloco)
+                # Procurar número de faltas nas próximas linhas
+                for j in range(1, 5):
+                    if i + j < len(linhas):
+                        prox = linhas[i + j].strip()
 
-            faltas = 0
-            freq = 100.0
+                        # Se encontrar um número standalone, é o número de faltas
+                        if re.match(r'^\d+$', prox):
+                            faltas = int(prox)
+                            break
 
-            # Regex direto no bloco
-            m_faltas = re.search(r'Faltas[^\d]*(\d+)', bloco_texto, re.IGNORECASE)
-            if m_faltas:
-                try:
-                    faltas = int(m_faltas.group(1))
-                except:
+                        # Se encontrar "Frequência", próximo valor é a frequência
+                        if prox.upper().startswith('FREQUÊNCIA'):
+                            # Buscar o valor na próxima linha ou mesma linha
+                            freq_match = re.search(r'(\d+(?:[.,]\d+)?)', prox)
+                            if freq_match:
+                                freq = float(freq_match.group(1).replace(',', '.'))
+                            elif i + j + 1 < len(linhas):
+                                freq_line = linhas[i + j + 1].strip()
+                                freq_match2 = re.match(r'^(\d+(?:[.,]\d+)?)$', freq_line)
+                                if freq_match2:
+                                    freq = float(freq_match2.group(1).replace(',', '.'))
+                            break
+
+                # Buscar frequência se ainda não encontrou
+                for j in range(1, 8):
+                    if i + j < len(linhas):
+                        prox = linhas[i + j].strip()
+                        if 'FREQUÊNCIA' in prox.upper() or prox.upper().startswith('FREQUÊNCIA'):
+                            # Procurar número na mesma linha ou próxima
+                            freq_match = re.search(r'(\d+(?:[.,]\d+)?)', prox)
+                            if freq_match:
+                                freq = float(freq_match.group(1).replace(',', '.'))
+                            elif i + j + 1 < len(linhas):
+                                freq_line = linhas[i + j + 1].strip()
+                                freq_match2 = re.match(r'^(\d+(?:[.,]\d+)?)$', freq_line)
+                                if freq_match2:
+                                    freq = float(freq_match2.group(1).replace(',', '.'))
+                            break
+
+                # Sanitização
+                if freq > 100:
+                    freq = 100.0
+                if freq < 0:
+                    freq = 0.0
+                if faltas < 0:
                     faltas = 0
 
-            m_freq = re.search(r'Frequência[^\d]*(\d+(?:[.,]\d+)?)', bloco_texto, re.IGNORECASE)
-            if not m_freq:
-                m_freq = re.search(r'(\d{1,3}(?:[.,]\d+)?)\s*%\b', bloco_texto)
-            if m_freq:
-                try:
-                    freq = float(m_freq.group(1).replace(',', '.'))
-                except:
+                # Validação: faltas muito altas (>60) são provavelmente erros de parsing
+                if faltas > 60:
+                    print(f"   ⚠️ Faltas suspeitas para {disciplina_atual}: {faltas} (ignorando)")
+                    # Se faltas > 60 e frequência está perto de 100%, provavelmente foi erro de parse
+                    if freq >= 90:
+                        faltas = 0
+
+                disc_key = normalizar_disciplina(disciplina_atual)
+
+                # Evitar sobrescrever com valores piores
+                prev = dados_faltas.get(disc_key)
+                if not prev or faltas <= prev.get('total_faltas', 999):
+                    dados_faltas[disc_key] = {
+                        'disciplina': disciplina_atual,
+                        'total_faltas': faltas,
+                        'percentual': freq
+                    }
+                    print(f"   📚 {disciplina_atual}: {faltas} faltas, {freq}%")
+
+            i += 1
+
+        # Fallback: Se não encontrou dados, tentar parsing alternativo
+        if not dados_faltas:
+            print("   ⚠️ Parsing primário falhou, tentando método alternativo...")
+
+            # Método 2: Procurar padrões "DISCIPLINA Faltas X Frequência Y%"
+            for i, linha in enumerate(linhas):
+                if is_disciplina_valida(linha):
+                    disciplina = limpar_texto(linha)
+                    disc_key = normalizar_disciplina(disciplina)
+
+                    # Procurar Faltas e Frequência nas próximas linhas
+                    bloco = "\n".join(linhas[i:i+10])
+
+                    faltas = 0
                     freq = 100.0
 
-            # Sanitização
-            if freq > 100:
-                freq = 100.0
-            if freq < 0:
-                freq = 0.0
-            if faltas < 0:
-                faltas = 0
+                    # Extrair faltas - procurar "Faltas" seguido de número
+                    m_faltas = re.search(r'Faltas\s*\n?\s*(\d+)', bloco, re.IGNORECASE)
+                    if m_faltas:
+                        val = int(m_faltas.group(1))
+                        # Validar que não é porcentagem
+                        if val <= 60:
+                            faltas = val
 
-            # Registrar resultado evitando sobrescrever com valores piores em duplicatas
-            prev = dados_faltas.get(disc_key)
-            if not prev or (faltas < prev.get('total_faltas', 999) or freq > prev.get('percentual', -1)):
-                dados_faltas[disc_key] = {
-                    'disciplina': disciplina,
-                    'total_faltas': faltas,
-                    'percentual': freq
-                }
-                print(f"   📚 {disciplina}: {faltas} faltas, {freq}%")
+                    # Extrair frequência
+                    m_freq = re.search(r'Frequência.*?(\d+(?:[.,]\d+)?)', bloco, re.IGNORECASE)
+                    if m_freq:
+                        freq = float(m_freq.group(1).replace(',', '.'))
+                        if freq > 100:
+                            freq = 100.0
 
-            i = j
+                    if disc_key not in dados_faltas:
+                        dados_faltas[disc_key] = {
+                            'disciplina': disciplina,
+                            'total_faltas': faltas,
+                            'percentual': freq
+                        }
+                        print(f"   📚 (alt) {disciplina}: {faltas} faltas, {freq}%")
 
-        # Validação: se houver bloco TOTAL, comparar com agregados
-        total_bloco = dados_faltas.get(normalizar_disciplina('TOTAL'))
-        if total_bloco:
-            soma_faltas = sum(v['total_faltas'] for k, v in dados_faltas.items() if k != normalizar_disciplina('TOTAL'))
-            print(f"   � Validação TOTAL: extraído {total_bloco['total_faltas']} vs soma {soma_faltas}")
+        # Remover entrada TOTAL se existir (não é uma disciplina)
+        total_key = normalizar_disciplina('TOTAL')
+        if total_key in dados_faltas:
+            total_info = dados_faltas.pop(total_key)
+            # Usar TOTAL para validação
+            soma_faltas = sum(v['total_faltas'] for v in dados_faltas.values())
+            print(f"   📊 Validação TOTAL: extraído {total_info['total_faltas']} vs soma {soma_faltas}")
 
         resultado = list(dados_faltas.values())
 
