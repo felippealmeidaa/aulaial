@@ -5,30 +5,50 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - IAUniev</title>
 
-    <!-- Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
 
-    <!-- FullCalendar CSS -->
     <link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css' rel='stylesheet' />
 
-    <!-- Marked.js para Markdown -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
-    <!-- Highlight.js para Syntax Highlighting -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 
-    <!-- CSS Principal -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
     <!-- ============================================ -->
-    <!-- NAVBAR -->
+    <!-- NAVBAR COM CARDS DE SINCRONIZAÇÃO -->
     <!-- ============================================ -->
     <nav class="navbar">
         <div class="nav-brand">
             <span class="logo">🤖</span>
             <h2>IAUniev</h2>
+        </div>
+
+        <!-- 🆕 CARDS DE SINCRONIZAÇÃO NO TOPO -->
+        <div class="sync-cards-header">
+            <!-- Card AVA -->
+            <div class="sync-card-mini" id="syncCardMiniAVA" onclick="abrirModalSync('ava')" title="Clique para sincronizar AVA">
+                <div class="sync-card-mini-icon">🔄</div>
+                <div class="sync-card-mini-content">
+                    <div class="sync-card-mini-title">AVA</div>
+                    <div class="sync-card-mini-status" id="statusMiniAVA">
+                        <span class="sync-loading-mini">Verificando...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card Lyceum -->
+            <div class="sync-card-mini" id="syncCardMiniLyceum" onclick="abrirModalSync('lyceum')" title="Clique para sincronizar Lyceum">
+                <div class="sync-card-mini-icon">📊</div>
+                <div class="sync-card-mini-content">
+                    <div class="sync-card-mini-title">Lyceum</div>
+                    <div class="sync-card-mini-status" id="statusMiniLyceum">
+                        <span class="sync-loading-mini">Verificando...</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="nav-menu">
@@ -45,14 +65,12 @@
                 <span>👤</span> Meu Perfil
             </a>
 
-            <!-- MODO ESCURO -->
             <button class="nav-link dark-mode-toggle" onclick="toggleDarkMode()" title="Alternar modo escuro">
                 <span class="dark-icon">🌙</span>
                 <span class="light-icon" style="display:none;">☀️</span>
                 <span class="nav-text">Modo</span>
             </button>
 
-            <!-- NOTIFICAÇÕES -->
             <div class="notif-container">
                 <button class="notif-btn" onclick="toggleNotificacoes()" title="Notificações">
                     🔔
@@ -76,7 +94,63 @@
     </nav>
 
     <!-- ============================================ -->
-    <!-- SEÇÃO: CHAT IA -->
+    <!-- MODAL DE SINCRONIZAÇÃO (AVA E LYCEUM) -->
+    <!-- ============================================ -->
+    <div id="modalSync" class="modal-sync" style="display: none;">
+        <div class="modal-sync-content">
+            <span class="modal-sync-close" onclick="fecharModalSync()">&times;</span>
+
+            <!-- Modal AVA -->
+            <div id="modalSyncAVA" class="modal-sync-body" style="display: none;">
+                <h2>🔄 Sincronizar com AVA</h2>
+                <p class="modal-sync-desc">Baixa materiais, vídeos e PDFs das disciplinas</p>
+
+                <div id="syncStatusAVAModal" class="sync-status-modal">
+                    <div id="syncStatusContentAVAModal">
+                        <p><strong id="statusTitleAVAModal">Verificando...</strong></p>
+                        <p id="statusTextAVAModal">Carregando informações...</p>
+                    </div>
+                </div>
+
+                <button id="syncBtnAVAModal" class="btn-sync-modal" onclick="iniciarSincronizacao()" disabled>
+                    <span id="syncBtnTextAVAModal">Sincronizar Agora</span>
+                </button>
+
+                <div id="syncProgressContainerAVAModal" class="sync-progress-modal" style="display: none;">
+                    <div class="sync-progress-bar-modal"></div>
+                </div>
+
+                <p class="modal-sync-info">⏱️ Tempo estimado: <strong>5-8 minutos</strong></p>
+            </div>
+
+            <!-- Modal Lyceum -->
+            <div id="modalSyncLyceum" class="modal-sync-body" style="display: none;">
+                <h2>📊 Sincronizar com Lyceum</h2>
+                <p class="modal-sync-desc">Baixa notas oficiais (VA1, VA2, VA3) e faltas</p>
+
+                <div id="syncStatusLyceumModal" class="sync-status-modal">
+                    <div id="syncStatusContentLyceumModal">
+                        <p><strong id="statusTitleLyceumModal">Verificando...</strong></p>
+                        <p id="statusTextLyceumModal">Carregando informações...</p>
+                    </div>
+                </div>
+
+                <button id="syncBtnLyceumModal" class="btn-sync-modal" onclick="iniciarSincronizacaoLyceum()" disabled>
+                    <span id="syncBtnTextLyceumModal">Sincronizar Agora</span>
+                </button>
+
+                <div id="syncProgressContainerLyceumModal" class="sync-progress-modal" style="display: none;">
+                    <div class="sync-progress-bar-modal"></div>
+                </div>
+
+                <p class="modal-sync-info">⏱️ Tempo estimado: <strong>2-3 minutos</strong></p>
+                <p class="modal-sync-info">🔐 Senha: <strong>9 primeiros dígitos do CPF</strong></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- SEÇÕES DO DASHBOARD -->
     <!-- ============================================ -->
     <section id="chat" class="section active">
         <div class="section-header">
@@ -112,18 +186,53 @@
             </div>
 
             <form id="chatForm" class="chat-input">
-                <label for="chatInput" style="display:none;">Mensagem do chat</label>
-                <input type="text" id="chatInput" placeholder="Digite sua mensagem..." required autocomplete="off">
-                <button type="submit" class="btn-send">
-                    ➤ Enviar
-                </button>
+                <div class="chat-input-wrapper">
+                    <!-- Botão de anexo -->
+                    <button type="button" class="btn-attach" onclick="toggleAttachMenu()" title="Anexar arquivo ou link">
+                        📎
+                    </button>
+
+                    <!-- Menu de anexos -->
+                    <div id="attachMenu" class="attach-menu" style="display: none;">
+                        <button type="button" class="attach-option" onclick="document.getElementById('fileInput').click()">
+                            📄 Enviar PDF/Documento
+                        </button>
+                        <button type="button" class="attach-option" onclick="toggleYouTubeInput()">
+                            🎥 Link do YouTube
+                        </button>
+                    </div>
+
+                    <!-- Input de arquivo (escondido) -->
+                    <input type="file" id="fileInput" accept=".pdf,.doc,.docx,.txt" style="display: none;" onchange="handleFileSelect(event)">
+
+                    <!-- Container de anexo selecionado -->
+                    <div id="attachmentPreview" class="attachment-preview" style="display: none;">
+                        <div class="attachment-info">
+                            <span id="attachmentIcon">📄</span>
+                            <span id="attachmentName">arquivo.pdf</span>
+                            <button type="button" class="btn-remove-attachment" onclick="removeAttachment()">×</button>
+                        </div>
+                    </div>
+
+                    <!-- Input de link do YouTube (escondido inicialmente) -->
+                    <div id="youtubeInputContainer" class="youtube-input-container" style="display: none;">
+                        <input type="text" id="youtubeLink" class="youtube-link-input" placeholder="Cole o link do YouTube aqui...">
+                        <button type="button" class="btn-load-youtube" onclick="loadYouTubeVideo()">Carregar</button>
+                        <button type="button" class="btn-cancel-youtube" onclick="cancelYouTube()">Cancelar</button>
+                    </div>
+
+                    <!-- Input de mensagem -->
+                    <label for="chatInput" style="display:none;">Mensagem do chat</label>
+                    <input type="text" id="chatInput" placeholder="Digite sua mensagem..." required autocomplete="off">
+
+                    <button type="submit" class="btn-send">
+                        ➤ Enviar
+                    </button>
+                </div>
             </form>
         </div>
     </section>
 
-    <!-- ============================================ -->
-    <!-- SEÇÃO: COMUNIDADE -->
-    <!-- ============================================ -->
     <section id="comunidade" class="section">
         <div class="section-header">
             <h1>👥 Comunidade Acadêmica</h1>
@@ -136,14 +245,13 @@
                     🤖 Inteligência Artificial
                 </button>
                 <button class="curso-tab" data-curso="ads" onclick="showCurso('ads', this)">
-                    📊 Análise e Desenvolvimento
+                    📊 Análise e Desenvolvimento de Sistemas
                 </button>
                 <button class="curso-tab" data-curso="es" onclick="showCurso('es', this)">
                     ⚙️ Engenharia de Software
                 </button>
             </div>
 
-            <!-- CURSO: INTELIGÊNCIA ARTIFICIAL -->
             <div id="curso-ia" class="curso-content active">
                 <div class="curso-header">
                     <h2>🤖 Inteligência Artificial</h2>
@@ -152,7 +260,6 @@
                     </button>
                 </div>
 
-                <!-- BARRA DE BUSCA E FILTROS - IA -->
                 <div class="search-filter-bar">
                     <label for="searchPosts-ia" style="display:none;">Buscar posts</label>
                     <input type="text" id="searchPosts-ia" class="search-input"
@@ -226,7 +333,6 @@
                 </div>
             </div>
 
-            <!-- CURSO: ADS -->
             <div id="curso-ads" class="curso-content">
                 <div class="curso-header">
                     <h2>📊 Análise e Desenvolvimento de Sistemas</h2>
@@ -308,7 +414,6 @@
                 </div>
             </div>
 
-            <!-- CURSO: ES -->
             <div id="curso-es" class="curso-content">
                 <div class="curso-header">
                     <h2>⚙️ Engenharia de Software</h2>
@@ -392,9 +497,6 @@
         </div>
     </section>
 
-    <!-- ============================================ -->
-    <!-- SEÇÃO: CALENDÁRIO -->
-    <!-- ============================================ -->
     <section id="calendario" class="section">
         <div class="section-header">
             <h1>📅 Calendário Acadêmico</h1>
@@ -438,9 +540,6 @@
         </div>
     </section>
 
-    <!-- ============================================ -->
-    <!-- SEÇÃO: MEU PERFIL -->
-    <!-- ============================================ -->
     <section id="perfil" class="section">
         <div class="section-header">
             <h1>👤 Meu Perfil Acadêmico</h1>
@@ -460,7 +559,6 @@
                 </button>
             </div>
 
-            <!-- ABA: NOTAS -->
             <div id="perfil-notas" class="perfil-content active">
                 <div class="perfil-header">
                     <h2>📊 Minhas Notas</h2>
@@ -511,7 +609,6 @@
                 </div>
             </div>
 
-            <!-- ABA: FALTAS -->
             <div id="perfil-faltas" class="perfil-content">
                 <h2>📅 Controle de Faltas</h2>
 
@@ -526,10 +623,6 @@
                                     <span class="falta-valor {% if falta.total_faltas > 12 %}alerta{% endif %}">
                                         {{ falta.total_faltas }}
                                     </span>
-                                </div>
-                                <div class="falta-item">
-                                    <span class="falta-label">Total de Aulas:</span>
-                                    <span class="falta-valor">{{ falta.total_aulas }}</span>
                                 </div>
                                 <div class="falta-item presenca">
                                     <span class="falta-label">Presença:</span>
@@ -551,9 +644,9 @@
                 </div>
             </div>
 
-            <!-- ABA: HORÁRIOS -->
             <div id="perfil-horarios" class="perfil-content">
-                <h2>🕐 Horários de Aula - Semestre 2025.2</h2>
+                <h2>🕐 Horários de Aula</h2>
+                <p class="horarios-info">📍 Dados sincronizados do Portal Lyceum</p>
 
                 <div class="horarios-grid">
                     {% for dia, aulas in horarios_aulas.items() %}
@@ -564,20 +657,29 @@
                             <div class="aula-item">
                                 <div class="aula-horario">⏰ {{ aula.horario }}</div>
                                 <div class="aula-disciplina">📚 {{ aula.disciplina }}</div>
+                                {% if aula.local %}
+                                <div class="aula-local">📍 {{ aula.local }}</div>
+                                {% endif %}
+                                {% if aula.professor %}
                                 <div class="aula-professor">👨‍🏫 {{ aula.professor }}</div>
+                                {% endif %}
                             </div>
                             {% endfor %}
                         </div>
                     </div>
                     {% endfor %}
                 </div>
+                
+                {% if not horarios_aulas %}
+                <div class="no-data-card">
+                    <p>📭 Nenhum horário encontrado.</p>
+                    <p>Clique em <strong>Sincronizar Lyceum</strong> no topo da página para baixar seus horários.</p>
+                </div>
+                {% endif %}
             </div>
         </div>
     </section>
 
-    <!-- ============================================ -->
-    <!-- MODAL: CRIAR POST -->
-    <!-- ============================================ -->
     <div id="createPostModal" class="modal">
         <div class="modal-content">
             <span class="modal-close" onclick="closeCreatePostModal()">×</span>
@@ -622,9 +724,6 @@
         </div>
     </div>
 
-    <!-- ============================================ -->
-    <!-- MODAL: CRIAR EVENTO (COM SELETOR DE 8 CORES) -->
-    <!-- ============================================ -->
     <div id="eventModal" class="modal">
         <div class="modal-evento-content">
             <span class="modal-close" onclick="closeEventModal()">×</span>
@@ -663,7 +762,6 @@
                     </select>
                 </div>
 
-                <!-- SELETOR DE CORES - ATUALIZADO COM 8 CORES -->
                 <div class="modal-form-group">
                     <label>Cor do Evento</label>
                     <div class="color-picker">
@@ -698,19 +796,12 @@
         </div>
     </div>
 
-    <!-- ============================================ -->
-    <!-- SCRIPTS -->
-    <!-- ============================================ -->
-
-    <!-- FullCalendar JS -->
     <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
 
-    <!-- Script para passar dark_mode do backend -->
     <script>
-        const darkMode = {{ dark_mode }};
+        var darkMode = JSON.parse('{{ dark_mode|tojson }}');
     </script>
 
-    <!-- Script principal -->
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html>

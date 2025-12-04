@@ -1,0 +1,11 @@
+{
+  "typeCheckingMode": "basic",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": [
+        "C:/Users/felip/AppData/Local/Programs/Python/Python314/Lib/site-packages"
+      ]
+    }
+  ]
+}

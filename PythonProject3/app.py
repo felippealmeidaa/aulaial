@@ -1,4 +1,6 @@
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash, send_file
+from flask import render_template, request, jsonify, session, redirect, url_for, flash, send_file
+from flask.app import Flask as FlaskApp
+from typing import Any, cast
 import google.generativeai as genai
 import os
 from datetime import datetime, timedelta
@@ -16,36 +18,90 @@ import bleach
 from functools import lru_cache
 import io
 from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
+from reportlab.pdfgen.canvas import Canvas
 from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle
 
 # ============================================
-# IMPORTAR SCRAPER E CACHE
+# 🆕 V5.1: IMPORTAR SCRAPER AVA COM NOVAS FUNÇÕES
 # ============================================
 try:
-    from scraper_ava import sincronizar_dados_ava, verificar_cache_recente
-except ImportError:
-    print("⚠️ AVISO: 'scraper_ava.py' não encontrado. Sincronização automática desativada.")
+    from scraper_ava import (
+        sincronizar_dados_ava,
+        obter_ultima_sincronizacao,
+        usuario_tem_cache
+    )
+
+    SCRAPER_DISPONIVEL = True
+    print("✅ Scraper V5.1 carregado com sucesso!")
+except ImportError as e:
+    print(f"⚠️ AVISO: Scraper não disponível. Erro: {e}")
+    SCRAPER_DISPONIVEL = False
 
 
-    def sincronizar_dados_ava(*args, **kwargs):
-        pass
+    def sincronizar_dados_ava(user_id: int, *args, **kwargs) -> None:
+        print("Scraper não disponível.")
+        return None
 
 
-    def verificar_cache_recente(*args):
+    def obter_ultima_sincronizacao(user_id: int) -> datetime | None:
+        return None
+
+
+    def usuario_tem_cache(user_id: int) -> bool:
+        return False
+
+# ============================================
+# 🆕 IMPORTAR SCRAPER LYCEUM V5.1
+# ============================================
+try:
+    from scraper_lyceum import (
+        sincronizar_dados_lyceum,
+        sincronizar_dados_lyceum_v2,
+        obter_ultima_sincronizacao_lyceum,
+        usuario_tem_cache_lyceum
+    )
+
+    LYCEUM_DISPONIVEL = True
+    print("✅ Scraper Lyceum V5.1 carregado com sucesso!")
+except ImportError as e:
+    print(f"⚠️ AVISO: Scraper Lyceum não disponível. Erro: {e}")
+    LYCEUM_DISPONIVEL = False
+
+
+    def sincronizar_dados_lyceum(user_id: int, *args, **kwargs) -> None:
+        print("Scraper Lyceum não disponível.")
+        return None
+
+    def sincronizar_dados_lyceum_v2(user_id: int, *args, **kwargs) -> None:
+        print("Scraper Lyceum V2 não disponível.")
+        return None
+
+
+    def obter_ultima_sincronizacao_lyceum(user_id: int) -> datetime | None:
+        return None
+
+
+    def usuario_tem_cache_lyceum(user_id: int) -> bool:
         return False
 
 # ============================================
 # CARREGAR VARIÁVEIS DE AMBIENTE
 # ============================================
 load_dotenv()
-app = Flask(__name__)
+app = FlaskApp(__name__)
 
 # ============================================
-# CONTROLE DE STATUS DA SINCRONIZAÇÃO (GLOBAL)
+# 🆕 V5.1: CONTROLE DE SINCRONIZAÇÕES AVA
 # ============================================
 status_sincronizacao = {}
+sincronizacoes_em_andamento = {}
+
+# ============================================
+# 🆕 V5.1: CONTROLE DE SINCRONIZAÇÕES LYCEUM
+# ============================================
+status_sincronizacao_lyceum = {}
+sincronizacoes_em_andamento_lyceum = {}
 
 # ============================================
 # CONFIGURAÇÕES DE SEGURANÇA
@@ -63,8 +119,9 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_USERNAME')
 
-mail = Mail(app)
-s = URLSafeTimedSerializer(app.secret_key)
+mail = Mail()
+mail.init_app(cast(Any, app))
+s = URLSafeTimedSerializer(app.secret_key or 'chave_desenvolvimento_segura')
 
 if not GEMINI_API_KEY:
     print("⚠️ AVISO: GEMINI_API_KEY não configurada no arquivo .env")
@@ -79,8 +136,10 @@ if GEMINI_API_KEY:
         'temperature': 0.7,
         'top_p': 0.95,
         'top_k': 40,
-        'max_output_tokens': 4000,
+        'max_output_tokens': 8000,
     }
+else:
+    model = None
 
 # ============================================
 # CONTROLE DE RATE LIMITING
@@ -127,8 +186,9 @@ def get_wait_time(user_id):
 # ============================================
 def sanitizar_html(texto):
     """Remove tags HTML perigosas mantendo formatação segura"""
+    if not texto: return ""
     tags_permitidas = ['b', 'i', 'u', 'p', 'br', 'strong', 'em', 'code', 'pre']
-    return bleach.clean(texto, tags=tags_permitidas, strip=True)
+    return bleach.clean(texto, tags=frozenset(tags_permitidas), strip=True)
 
 
 # ============================================
@@ -145,7 +205,6 @@ def init_db():
     with get_db_connection() as conn:
         c = conn.cursor()
 
-        # Tabela de usuários
         c.execute(''' 
             CREATE TABLE IF NOT EXISTS usuarios ( 
                 id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -160,7 +219,6 @@ def init_db():
             ) 
         ''')
 
-        # Tabela CONTEUDOS_AVA
         c.execute(''' 
             CREATE TABLE IF NOT EXISTS conteudos_ava ( 
                 id INTEGER PRIMARY KEY AUTOINCREMENT,  
@@ -171,7 +229,6 @@ def init_db():
             ) 
         ''')
 
-        # Tabela de posts (com tags)
         c.execute(''' 
             CREATE TABLE IF NOT EXISTS posts ( 
                 id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -188,7 +245,6 @@ def init_db():
             ) 
         ''')
 
-        # Tabela de curtidas
         c.execute(''' 
             CREATE TABLE IF NOT EXISTS curtidas ( 
                 id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -200,7 +256,6 @@ def init_db():
             ) 
         ''')
 
-        # Tabela de comentários
         c.execute(''' 
             CREATE TABLE IF NOT EXISTS comentarios ( 
                 id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -213,7 +268,6 @@ def init_db():
             ) 
         ''')
 
-        # Tabela de histórico de chat
         c.execute(''' 
             CREATE TABLE IF NOT EXISTS historico_chat ( 
                 id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -225,7 +279,6 @@ def init_db():
             ) 
         ''')
 
-        # Tabela de eventos do calendário
         c.execute(''' 
             CREATE TABLE IF NOT EXISTS eventos_calendario ( 
                 id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -243,7 +296,6 @@ def init_db():
             ) 
         ''')
 
-        # Tabela de notas do aluno
         c.execute(''' 
             CREATE TABLE IF NOT EXISTS notas_aluno ( 
                 id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -258,7 +310,6 @@ def init_db():
             ) 
         ''')
 
-        # Tabela de faltas do aluno
         c.execute(''' 
             CREATE TABLE IF NOT EXISTS faltas_aluno ( 
                 id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -271,7 +322,6 @@ def init_db():
             ) 
         ''')
 
-        # Tabela de notificações (NOVA)
         c.execute(''' 
             CREATE TABLE IF NOT EXISTS notificacoes ( 
                 id INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -285,17 +335,25 @@ def init_db():
             ) 
         ''')
 
-        # Verificar se coluna tags existe, senão adicionar
         try:
             c.execute("SELECT tags FROM posts LIMIT 1")
         except sqlite3.OperationalError:
             c.execute("ALTER TABLE posts ADD COLUMN tags TEXT")
 
-        # Verificar se coluna dark_mode existe
         try:
             c.execute("SELECT dark_mode FROM usuarios LIMIT 1")
         except sqlite3.OperationalError:
             c.execute("ALTER TABLE usuarios ADD COLUMN dark_mode INTEGER DEFAULT 0")
+
+        try:
+            c.execute("SELECT ultima_atualizacao_lyceum FROM usuarios LIMIT 1")
+        except sqlite3.OperationalError:
+            c.execute("ALTER TABLE usuarios ADD COLUMN ultima_atualizacao_lyceum TEXT")
+
+        try:
+            c.execute("SELECT senha_lyceum FROM usuarios LIMIT 1")
+        except sqlite3.OperationalError:
+            c.execute("ALTER TABLE usuarios ADD COLUMN senha_lyceum TEXT")
 
         conn.commit()
     print("✅ Banco de dados inicializado/verificado com sucesso!")
@@ -348,9 +406,9 @@ def buscar_notificacoes():
                     'data': row['data_formatada']
                 })
 
-            # Contar não lidas
             c.execute('SELECT COUNT(*) as total FROM notificacoes WHERE usuario_id = ? AND lida = 0', (user_id,))
-            nao_lidas = c.fetchone()['total']
+            result = c.fetchone()
+            nao_lidas = result['total'] if result else 0
 
         return jsonify({
             'success': True,
@@ -367,7 +425,7 @@ def marcar_notificacao_lida():
     if 'user_id' not in session:
         return jsonify({'error': 'Não autorizado'}), 401
 
-    data = request.json
+    data = request.get_json(silent=True) or {}
     notif_id = data.get('notificacao_id')
 
     try:
@@ -469,9 +527,6 @@ CALENDÁRIO DE PROVAS 2025.2:
 • Substitutivas 3ª VA: 16 e 17 de Dezembro 
 """
 
-# ============================================
-# HORÁRIOS DAS AULAS
-# ============================================
 HORARIOS_AULAS = {
     'Segunda-feira': [
         {'horario': '19:00 - 20:40', 'disciplina': 'Cidadania ética e espiritualidade',
@@ -501,9 +556,6 @@ HORARIOS_AULAS = {
     ]
 }
 
-# ============================================
-# EVENTOS ACADÊMICOS FIXOS
-# ============================================
 EVENTOS_ACADEMICOS = [
     {'title': '🎉 Feriado Municipal', 'start': '2025-07-26', 'color': '#e63946', 'tipo': 'feriado', 'allDay': True},
     {'title': '🎓 Colação de Grau Unificada', 'start': '2025-07-30', 'color': '#4a90e2', 'tipo': 'evento',
@@ -555,20 +607,40 @@ EVENTOS_ACADEMICOS = [
 ]
 
 
-# ============================================
-# FUNÇÕES AUXILIARES
-# ============================================
 def executar_sincronizacao_monitorada(user_id, matricula, cpf, forcar=False):
-    """Sincronização em thread"""
+    """V5.1: Sincronização AVA em thread"""
     try:
-        print(f"[SYNC] Iniciando sync para ID {user_id}")
+        print(f"[SYNC AVA] Iniciando sync para ID {user_id}")
         status_sincronizacao[user_id] = 'em_andamento'
+        sincronizacoes_em_andamento[user_id] = True
+
         sincronizar_dados_ava(user_id, matricula, cpf, forcar_atualizacao=forcar)
-        print(f"[SYNC] Sync finalizado para ID {user_id}")
+
+        print(f"[SYNC AVA] Sync finalizado para ID {user_id}")
         status_sincronizacao[user_id] = 'concluido'
+        sincronizacoes_em_andamento[user_id] = False
     except Exception as e:
-        print(f"[ERROR] Erro no sync: {e}")
+        print(f"[ERROR AVA] Erro no sync: {e}")
         status_sincronizacao[user_id] = 'erro'
+        sincronizacoes_em_andamento[user_id] = False
+
+
+def executar_sincronizacao_monitorada_lyceum(user_id, matricula, senha_lyceum, forcar=False):
+    """V5.1: Sincronização Lyceum em thread"""
+    try:
+        print(f"[SYNC LYCEUM] Iniciando sync para ID {user_id}")
+        status_sincronizacao_lyceum[user_id] = 'em_andamento'
+        sincronizacoes_em_andamento_lyceum[user_id] = True
+
+        sincronizar_dados_lyceum_v2(user_id, matricula, senha_lyceum, forcar_atualizacao=forcar)
+
+        print(f"[SYNC LYCEUM] Sync finalizado para ID {user_id}")
+        status_sincronizacao_lyceum[user_id] = 'concluido'
+        sincronizacoes_em_andamento_lyceum[user_id] = False
+    except Exception as e:
+        print(f"[ERROR LYCEUM] Erro no sync: {e}")
+        status_sincronizacao_lyceum[user_id] = 'erro'
+        sincronizacoes_em_andamento_lyceum[user_id] = False
 
 
 def gerar_notas_ficticias(usuario_id):
@@ -779,9 +851,17 @@ def cadastrar():
         return render_template('cadastro.html', erro='Matrícula ou e-mail já cadastrados!')
 
 
+# ============================================
+# 🆕 V5.1 CORRETO: ROTA DE LOGIN
+# ============================================
 @app.route('/login', methods=['POST'])
 def login():
-    """Login com sincronização"""
+    """
+    🆕 V5.1 CORRETO:
+    - 1º LOGIN (usuário novo sem dados): Scraping AUTOMÁTICO + tela loading
+    - 2º+ LOGIN (usuário com dados): Login RÁPIDO (< 5 seg)
+    - BOTÃO: Para RE-SINCRONIZAR quando quiser
+    """
     login_input = request.form.get('login') or request.form.get('matricula') or request.form.get('email')
     senha = request.form.get('password')
 
@@ -799,34 +879,79 @@ def login():
         usuario = c.fetchone()
 
     if usuario and check_password_hash(usuario['senha'], senha):
+        # ============================================
+        # SALVA DADOS NA SESSÃO (CRÍTICO!)
+        # ============================================
         session['user_id'] = usuario['id']
         session['user_nome'] = usuario['nome']
         session['user_curso'] = usuario['curso']
         session['dark_mode'] = usuario['dark_mode']
+        session['matricula'] = usuario['matricula']
+        session['cpf'] = usuario['cpf']
 
-        if usuario['cpf']:
-            tem_cache = verificar_cache_recente(usuario['id'])
+        print(f"[LOGIN] Login bem-sucedido: {usuario['nome']} (ID: {usuario['id']})")
 
-            if tem_cache:
-                print(f"[LOGIN] Login rapido: {usuario['nome']}")
+        # ============================================
+        # DECISÃO: SCRAPING AUTOMÁTICO OU LOGIN RÁPIDO?
+        # ============================================
+        if usuario['cpf'] and SCRAPER_DISPONIVEL:
+            tem_dados = usuario_tem_cache(usuario['id'])
+
+            if tem_dados:
+                # ============================================
+                # ✅ USUÁRIO COM DADOS: LOGIN RÁPIDO
+                # ============================================
+                ultima_sync = obter_ultima_sincronizacao(usuario['id'])
+                if ultima_sync:
+                    print(f"[LOGIN] Login rápido (Cache válido)")
+                    print(f"[LOGIN] Última sincronização: {ultima_sync.strftime('%d/%m/%Y às %H:%M')}")
+                else:
+                    print(f"[LOGIN] Login rápido (Dados existem)")
+
                 status_sincronizacao[usuario['id']] = 'concluido'
+                gerar_notas_ficticias(usuario['id'])
+                gerar_faltas_ficticias(usuario['id'])
+
                 return redirect(url_for('dashboard'))
+
             else:
-                print(f"[LOGIN] Login completo: {usuario['nome']}")
                 status_sincronizacao[usuario['id']] = 'iniciando'
+                status_sincronizacao_lyceum[usuario['id']] = 'iniciando'
+                sincronizacoes_em_andamento[usuario['id']] = True
+                sincronizacoes_em_andamento_lyceum[usuario['id']] = True
 
                 thread_ava = threading.Thread(
                     target=executar_sincronizacao_monitorada,
-                    args=(usuario['id'], usuario['matricula'], usuario['cpf'], True)
+                    args=(usuario['id'], usuario['matricula'], usuario['cpf'], True),
+                    daemon=True
                 )
-                thread_ava.daemon = True
                 thread_ava.start()
 
-                return redirect(url_for('tela_carregamento'))
+                senha_lyceum = None
+                try:
+                    with get_db_connection() as conn:
+                        c = conn.cursor()
+                        c.execute('SELECT senha_lyceum, cpf FROM usuarios WHERE id = ?', (usuario['id'],))
+                        row = c.fetchone()
+                        if row:
+                            senha_lyceum = row['senha_lyceum'] or row['cpf']
+                except Exception:
+                    senha_lyceum = usuario['cpf']
+
+                if senha_lyceum:
+                    thread_lyc = threading.Thread(
+                        target=executar_sincronizacao_monitorada_lyceum,
+                        args=(usuario['id'], usuario['matricula'], senha_lyceum, True),
+                        daemon=True
+                    )
+                    thread_lyc.start()
+
+                return redirect(url_for('dashboard'))
 
         gerar_notas_ficticias(usuario['id'])
         gerar_faltas_ficticias(usuario['id'])
         return redirect(url_for('dashboard'))
+
     else:
         session['login_erro'] = 'E-mail/matrícula ou senha incorretos!'
         return redirect(url_for('index'))
@@ -853,7 +978,7 @@ def esqueci_senha():
             link = url_for('redefinir_senha', token=token, _external=True)
 
             try:
-                msg = Message('Recuperação de Senha - IAUniev', recipients=[email])
+                msg = Message('Recuperação de Senha - IAUniev', recipients=[email] if email else None)
                 msg.body = f'Clique no link: {link}\n\nExpira em 1 hora.'
                 msg.html = f"""<p>Clique no botão:</p><a href="{link}" style="background:#0056b3; color:white; padding:10px 20px; text-decoration:none; border-radius:5px;">Redefinir Senha</a>"""
                 mail.send(msg)
@@ -881,7 +1006,7 @@ def redefinir_senha(token):
         nova_senha = request.form.get('password')
         confirm_senha = request.form.get('confirm_password')
 
-        if nova_senha != confirm_senha:
+        if not nova_senha or not confirm_senha or nova_senha != confirm_senha:
             return render_template('redefinir_senha.html', erro='Senhas não coincidem!', token=token)
 
         senha_hash = generate_password_hash(nova_senha)
@@ -965,6 +1090,47 @@ def dashboard():
                 'percentual_presenca': row['percentual_presenca']
             })
 
+        # ============================================
+        # 🆕 V7.0: BUSCAR HORÁRIOS DO SCRAPER
+        # ============================================
+        horarios_aulas_dinamicos = {}
+        try:
+            c.execute('''
+                SELECT dia_semana, dia_nome, disciplina, horario_inicio, horario_fim, local, professor
+                FROM horarios_aluno
+                WHERE usuario_id = ?
+                ORDER BY dia_semana, horario_inicio
+            ''', (user_id,))
+            
+            horarios_rows = c.fetchall()
+            
+            if horarios_rows:
+                # Organizar por dia da semana
+                for row in horarios_rows:
+                    dia_nome = row['dia_nome'] or f"Dia {row['dia_semana']}"
+                    
+                    if dia_nome not in horarios_aulas_dinamicos:
+                        horarios_aulas_dinamicos[dia_nome] = []
+                    
+                    horario_str = f"{row['horario_inicio']} - {row['horario_fim']}" if row['horario_inicio'] and row['horario_fim'] else "A definir"
+                    
+                    horarios_aulas_dinamicos[dia_nome].append({
+                        'horario': horario_str,
+                        'disciplina': row['disciplina'],
+                        'professor': row['professor'] or '',
+                        'local': row['local'] or ''
+                    })
+                
+                print(f"[DASHBOARD] Usando {len(horarios_rows)} horários do scraper")
+            else:
+                # Fallback para dados fixos se não houver dados scraped
+                horarios_aulas_dinamicos = HORARIOS_AULAS
+                print("[DASHBOARD] Usando horários fixos (fallback)")
+                
+        except Exception as e:
+            print(f"[DASHBOARD] Erro ao buscar horários: {e}")
+            horarios_aulas_dinamicos = HORARIOS_AULAS
+
     return render_template(
         'dashboard.html',
         nome=nome,
@@ -973,22 +1139,18 @@ def dashboard():
         posts_ia=posts_por_curso.get('ia', []),
         posts_ads=posts_por_curso.get('ads', []),
         posts_es=posts_por_curso.get('es', []),
-        horarios_aulas=HORARIOS_AULAS,
+        horarios_aulas=horarios_aulas_dinamicos,
         eventos_academicos=json.dumps(EVENTOS_ACADEMICOS),
         notas=notas,
         faltas=faltas
     )
 
 
-@app.route('/carregando')
-def tela_carregamento():
-    if 'user_id' not in session:
-        return redirect(url_for('index'))
-    return render_template('loading.html')
+ 
 
 
 # ============================================
-# ROTA DO CHAT (ATUALIZADA)
+# ROTA DO CHAT
 # ============================================
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -1004,7 +1166,7 @@ def chat():
             'rate_limited': True
         })
 
-    data = request.json
+    data = request.get_json(silent=True) or {}
     mensagem_usuario = sanitizar_html(data.get('message', '').strip())
 
     resposta_evento = criar_evento_rapido_via_chat(user_id, mensagem_usuario)
@@ -1039,37 +1201,56 @@ def chat():
     if quer_calendario:
         contexto_cal = f"CALENDÁRIO:\n{DADOS_ACADEMICOS}\n"
 
+    termos_horarios = ['aula', 'horário', 'horario', 'segunda', 'terça', 'terca',
+                       'quarta', 'quinta', 'sexta', 'grade', 'disciplina',
+                       'professor', 'hoje', 'amanhã', 'amanha']
+    quer_horarios = any(t in termo_lower for t in termos_horarios)
+
+    contexto_horarios = ""
+    if quer_horarios:
+        contexto_horarios = "\n--- GRADE DE HORÁRIOS ---\n"
+        for dia, aulas in HORARIOS_AULAS.items():
+            contexto_horarios += f"\n{dia}:\n"
+            for aula in aulas:
+                contexto_horarios += f"  • {aula['horario']} - {aula['disciplina']}\n"
+                contexto_horarios += f"    Professor: {aula['professor']}\n"
+        contexto_horarios += "\n"
+
     match_semana = re.search(r'semana\s*(\d+)', termo_lower)
     semana_foco = match_semana.group(1) if match_semana else None
 
     materiais_encontrados = False
 
     if conteudos_ava:
-        ava_texto = "--- CONTEÚDOS DO AVA ---\n"
+        ava_texto = "--- CONTEÚDOS DETALHADOS DO AVA ---\n"
 
         for item in conteudos_ava:
             disc_texto = item['conteudo_texto']
             disc_nome = item['disciplina']
 
             if semana_foco:
-                if f"Semana {semana_foco}" in disc_texto or f"Semana {semana_foco.zfill(2)}" in disc_texto:
-                    blocos = disc_texto.split("=================================")
-                    blocos_uteis = [b for b in blocos if
-                                    f"Semana {semana_foco}" in b or f"Semana {semana_foco.zfill(2)}" in b]
+                padroes = [f"SEMANA {semana_foco}", f"Semana {semana_foco}", f"Fase {semana_foco}"]
 
-                    if blocos_uteis:
-                        resumo = "\n".join(blocos_uteis)
-                        ava_texto += f"\n>>> [{disc_nome}] - SEMANA {semana_foco} <<<\n{resumo}\n"
-                        materiais_encontrados = True
+                for padrao in padroes:
+                    if padrao in disc_texto:
+                        partes = disc_texto.split(padrao)
+                        if len(partes) > 1:
+                            conteudo_semana = partes[1][:5000]
+                            ava_texto += f"\n>>> [{disc_nome}] - {padrao} <<<\n{conteudo_semana}\n"
+                            materiais_encontrados = True
+                            break
+
             elif any(t in disc_nome.lower() for t in termo_lower.split() if len(t) > 3):
-                ava_texto += f"\n>>> {disc_nome} <<<\n{disc_texto[:15000]}\n"
+                ava_texto += f"\n>>> {disc_nome} (Visão Geral) <<<\n{disc_texto[:3000]}\n"
                 materiais_encontrados = True
 
         if not materiais_encontrados:
             if semana_foco:
-                ava_texto += f"\nAVISO: Semana {semana_foco} não encontrada.\n"
+                ava_texto += f"\nAVISO: Não encontrei detalhes específicos para a Semana {semana_foco} nos textos baixados.\n"
+
+            ava_texto += "Resumo dos materiais disponíveis no banco:\n"
             for item in conteudos_ava:
-                ava_texto += f"## {item['disciplina']}:\n{item['conteudo_texto'][:800]}\n...\n"
+                ava_texto += f"## {item['disciplina']}:\n{item['conteudo_texto'][:500]}...\n"
     else:
         ava_texto = "AVA não sincronizado."
 
@@ -1092,23 +1273,15 @@ def chat():
         curso_usuario = 'N/A'
 
     try:
-        contexto_usuario = f""" 
-Usuário: 
-- Nome: {nome_usuario} 
-- Matrícula: {matricula_usuario} 
-- E-mail: {email_usuario} 
-- Curso: {curso_usuario} 
-"""
-        contexto_comunidade = montar_contexto_comunidade(limite_posts=6)
-
         prompt = f"""
 Você é o **IAUniev Professor**, assistente acadêmico da UniEvangélica.
 
-{contexto_usuario}
+ALUNO: {nome_usuario} ({curso_usuario})
 
 {contexto_cal}
+{contexto_horarios}
 
-CONTEÚDO DO AVA:
+CONTEÚDO DO AVA (EXTRAÍDO):
 {ava_texto}
 
 HISTÓRICO:
@@ -1117,11 +1290,14 @@ HISTÓRICO:
 PERGUNTA:
 \"\"\"{mensagem_usuario}\"\"\"
 
-### DIRETRIZES ###
-1. Explique o conteúdo
-2. PRIORIZE LINKS: Se houver vídeos/arquivos, liste-os
-3. Use Markdown
-4. Se Semana X solicitada, mostre materiais
+### DIRETRIZES DE RESPOSTA ###
+1. **LEIA O TEXTO DO AVA:** O texto acima contém descrições das aulas, resumos e links. Use isso como base.
+2. **SEMANA X:** Se o aluno perguntou sobre "Semana X", RESUMA o que está escrito nos tópicos dessa semana. Diga "O conteúdo aborda..." ou "Os tópicos são...". Não diga apenas que "tem atividades".
+3. **VÍDEOS E ARQUIVOS:** Se houver links no texto (ex: 🎬 [VIDEOAULA] ou 📎 [PDF]), LISTE-OS EXPLICITAMENTE para o aluno clicar.
+   - Exemplo: "📺 Assista à videoaula: [Link]"
+   - Exemplo: "📄 Leia o PDF: [Link]"
+4. Se o texto extraído não tiver descrição (estiver vazio ou só com títulos genéricos), seja honesto: "O professor não colocou descrição detalhada no AVA, apenas os títulos das atividades."
+5. Seja útil e incentive o estudo.
 """
 
         safety_settings = [
@@ -1134,7 +1310,6 @@ PERGUNTA:
         if model:
             response = model.generate_content(
                 prompt,
-                generation_config=generation_config,
                 safety_settings=safety_settings
             )
             if response.parts:
@@ -1153,6 +1328,255 @@ PERGUNTA:
         resposta = "Erro de conexão."
         salvar_historico_chat(user_id, mensagem_usuario, resposta)
         return jsonify({'response': resposta})
+
+
+# ============================================
+# 🆕 V5.1: NOVAS ROTAS PARA SINCRONIZAÇÃO MANUAL AVA
+# ============================================
+
+@app.route('/api/status_sync', methods=['GET'])
+def status_sync():
+    """V5.1: Retorna status da sincronização AVA do usuário"""
+    try:
+        user_id = session.get('user_id')
+
+        if not user_id:
+            return jsonify({'erro': 'Não autenticado'}), 401
+
+        if not SCRAPER_DISPONIVEL:
+            return jsonify({
+                'erro': 'Scraper não disponível',
+                'sincronizando': False,
+                'tem_dados': False
+            }), 500
+
+        sincronizando = sincronizacoes_em_andamento.get(user_id, False)
+        tem_dados = usuario_tem_cache(user_id)
+        ultima_sync = obter_ultima_sincronizacao(user_id)
+
+        response = {
+            'sincronizando': sincronizando,
+            'tem_dados': tem_dados,
+            'ultima_sync': None,
+            'ultima_sync_formatada': None
+        }
+
+        if ultima_sync:
+            response['ultima_sync'] = ultima_sync.isoformat()
+            response['ultima_sync_formatada'] = ultima_sync.strftime('%d/%m/%Y às %H:%M')
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        print(f"[API] Erro ao obter status: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/api/sincronizar_ava', methods=['POST'])
+def api_sincronizar_ava():
+    """V5.1: Inicia sincronização MANUAL com o AVA"""
+    try:
+        user_id = session.get('user_id')
+
+        if not user_id:
+            return jsonify({'erro': 'Não autenticado'}), 401
+
+        if not SCRAPER_DISPONIVEL:
+            return jsonify({'erro': 'Scraper não disponível'}), 500
+
+        if sincronizacoes_em_andamento.get(user_id, False):
+            print(f"[API] Sincronização já em andamento para user {user_id}")
+            return jsonify({
+                'status': 'em_andamento',
+                'mensagem': 'Sincronização já está em andamento'
+            }), 200
+
+        matricula = session.get('matricula')
+        cpf = session.get('cpf')
+        nome = session.get('user_nome')
+
+        if not matricula or not cpf:
+            print(f"[API] Erro: Credenciais não encontradas na sessão para user {user_id}")
+            return jsonify({
+                'erro': 'Dados de login não encontrados na sessão'
+            }), 400
+
+        print(f"[API] Iniciando sincronização para: {nome} (ID: {user_id}, Matrícula: {matricula})")
+
+        thread = threading.Thread(
+            target=executar_sincronizacao_monitorada,
+            args=(user_id, matricula, cpf, True),
+            daemon=True
+        )
+        thread.start()
+
+        return jsonify({
+            'status': 'iniciado',
+            'mensagem': 'Sincronização iniciada com sucesso',
+            'estimativa': '5-8 minutos',
+            'user_id': user_id
+        }), 200
+
+    except Exception as e:
+        print(f"[API] Erro ao iniciar sincronização: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/api/cancelar_sync', methods=['POST'])
+def cancelar_sync():
+    """V5.1: Marca sincronização como cancelada"""
+    try:
+        user_id = session.get('user_id')
+
+        if not user_id:
+            return jsonify({'erro': 'Não autenticado'}), 401
+
+        if user_id in sincronizacoes_em_andamento:
+            sincronizacoes_em_andamento[user_id] = False
+            status_sincronizacao[user_id] = 'cancelado'
+            print(f"[API] Sincronização marcada como cancelada para user {user_id}")
+
+        return jsonify({
+            'status': 'cancelado',
+            'mensagem': 'Status atualizado'
+        }), 200
+
+    except Exception as e:
+        print(f"[API] Erro ao cancelar: {e}")
+        return jsonify({'erro': str(e)}), 500
+
+
+# ============================================
+# 🆕 ROTAS API - LYCEUM V5.1
+# ============================================
+
+@app.route('/api/status_sync_lyceum', methods=['GET'])
+def status_sync_lyceum():
+    """V5.1: Retorna status da sincronização Lyceum"""
+    try:
+        user_id = session.get('user_id')
+
+        if not user_id:
+            return jsonify({'erro': 'Não autenticado'}), 401
+
+        if not LYCEUM_DISPONIVEL:
+            return jsonify({
+                'erro': 'Scraper Lyceum não disponível',
+                'sincronizando': False,
+                'tem_dados': False
+            }), 500
+
+        sincronizando = sincronizacoes_em_andamento_lyceum.get(user_id, False)
+        tem_dados = usuario_tem_cache_lyceum(user_id)
+        ultima_sync = obter_ultima_sincronizacao_lyceum(user_id)
+
+        response = {
+            'sincronizando': sincronizando,
+            'tem_dados': tem_dados,
+            'ultima_sync': None,
+            'ultima_sync_formatada': None
+        }
+
+        if ultima_sync:
+            response['ultima_sync'] = ultima_sync.isoformat()
+            response['ultima_sync_formatada'] = ultima_sync.strftime('%d/%m/%Y às %H:%M')
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        print(f"[API LYCEUM] Erro ao obter status: {e}")
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/api/sincronizar_lyceum', methods=['POST'])
+def api_sincronizar_lyceum():
+    """V5.1: Inicia sincronização MANUAL com Lyceum"""
+    try:
+        user_id = session.get('user_id')
+
+        if not user_id:
+            return jsonify({'erro': 'Não autenticado'}), 401
+
+        if not LYCEUM_DISPONIVEL:
+            return jsonify({'erro': 'Scraper Lyceum não disponível'}), 500
+
+        if sincronizacoes_em_andamento_lyceum.get(user_id, False):
+            print(f"[API LYCEUM] Sincronização já em andamento para user {user_id}")
+            return jsonify({
+                'status': 'em_andamento',
+                'mensagem': 'Sincronização já está em andamento'
+            }), 200
+
+        matricula = session.get('matricula')
+        nome = session.get('user_nome')
+
+        # Tenta obter senha_lyceum do banco
+        senha_lyceum = None
+        try:
+            with get_db_connection() as conn:
+                c = conn.cursor()
+                c.execute('SELECT senha_lyceum, cpf FROM usuarios WHERE id = ?', (user_id,))
+                row = c.fetchone()
+                if row:
+                    senha_lyceum = row['senha_lyceum'] or row['cpf']
+        except:
+            pass
+
+        if not matricula or not senha_lyceum:
+            print(f"[API LYCEUM] Erro: Credenciais não encontradas para user {user_id}")
+            return jsonify({
+                'erro': 'Credenciais não encontradas. Configure sua senha do Lyceum.'
+            }), 400
+
+        print(f"[API LYCEUM] Iniciando sincronização para: {nome} (ID: {user_id})")
+
+        thread = threading.Thread(
+            target=executar_sincronizacao_monitorada_lyceum,
+            args=(user_id, matricula, senha_lyceum, True),
+            daemon=True
+        )
+        thread.start()
+
+        return jsonify({
+            'status': 'iniciado',
+            'mensagem': 'Sincronização Lyceum iniciada com sucesso',
+            'estimativa': '2-3 minutos',
+            'user_id': user_id
+        }), 200
+
+    except Exception as e:
+        print(f"[API LYCEUM] Erro ao iniciar sincronização: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/api/cancelar_sync_lyceum', methods=['POST'])
+def cancelar_sync_lyceum():
+    """V5.1: Marca sincronização Lyceum como cancelada"""
+    try:
+        user_id = session.get('user_id')
+
+        if not user_id:
+            return jsonify({'erro': 'Não autenticado'}), 401
+
+        if user_id in sincronizacoes_em_andamento_lyceum:
+            sincronizacoes_em_andamento_lyceum[user_id] = False
+            status_sincronizacao_lyceum[user_id] = 'cancelado'
+            print(f"[API LYCEUM] Sincronização marcada como cancelada para user {user_id}")
+
+        return jsonify({
+            'status': 'cancelado',
+            'mensagem': 'Status atualizado'
+        }), 200
+
+    except Exception as e:
+        print(f"[API LYCEUM] Erro ao cancelar: {e}")
+        return jsonify({'erro': str(e)}), 500
 
 
 # ============================================
@@ -1248,7 +1672,7 @@ def buscar_posts():
 def criar_post():
     if 'user_id' not in session:
         return jsonify({'error': 'Não autorizado'}), 401
-    data = request.json
+    data = request.get_json(silent=True) or {}
     curso = data.get('curso')
     tipo = data.get('tipo')
     titulo = sanitizar_html(data.get('titulo'))
@@ -1279,7 +1703,7 @@ def criar_post():
 def curtir_post():
     if 'user_id' not in session:
         return jsonify({'error': 'Não autorizado'}), 401
-    data = request.json
+    data = request.get_json(silent=True) or {}
     post_id = data.get('post_id')
     user_id = session['user_id']
 
@@ -1289,7 +1713,6 @@ def curtir_post():
             c.execute('SELECT * FROM curtidas WHERE post_id = ? AND usuario_id = ?', (post_id, user_id))
             curtida_existe = c.fetchone()
 
-            # Buscar dono do post para notificação
             c.execute('SELECT usuario_id, titulo FROM posts WHERE post_id = ?', (post_id,))
             post = c.fetchone()
 
@@ -1300,7 +1723,6 @@ def curtir_post():
                 c.execute('INSERT INTO curtidas (post_id, usuario_id) VALUES (?, ?)', (post_id, user_id))
                 acao = 'curtiu'
 
-                # Criar notificação para o dono do post
                 if post and post['usuario_id'] != user_id:
                     criar_notificacao(
                         post['usuario_id'],
@@ -1321,7 +1743,7 @@ def curtir_post():
 def comentar_post():
     if 'user_id' not in session:
         return jsonify({'error': 'Não autorizado'}), 401
-    data = request.json
+    data = request.get_json(silent=True) or {}
     post_id = data.get('post_id')
     comentario = sanitizar_html(data.get('comentario'))
     user_id = session['user_id']
@@ -1331,7 +1753,6 @@ def comentar_post():
         with get_db_connection() as conn:
             c = conn.cursor()
 
-            # Buscar dono do post
             c.execute('SELECT usuario_id, titulo FROM posts WHERE post_id = ?', (post_id,))
             post = c.fetchone()
 
@@ -1342,7 +1763,6 @@ def comentar_post():
             comentario_id = c.lastrowid
             conn.commit()
 
-            # Criar notificação
             if post and post['usuario_id'] != user_id:
                 criar_notificacao(
                     post['usuario_id'],
@@ -1366,7 +1786,7 @@ def comentar_post():
 def excluir_post():
     if 'user_id' not in session:
         return jsonify({'error': 'Não autorizado'}), 401
-    data = request.json
+    data = request.get_json(silent=True) or {}
     post_id = data.get('post_id')
     user_id = session['user_id']
 
@@ -1392,7 +1812,7 @@ def excluir_post():
 def excluir_comentario():
     if 'user_id' not in session:
         return jsonify({'error': 'Não autorizado'}), 401
-    data = request.json
+    data = request.get_json(silent=True) or {}
     comentario_id = data.get('comentario_id')
     user_id = session['user_id']
 
@@ -1461,8 +1881,7 @@ def buscar_eventos_calendario():
     user_id = session['user_id']
 
     try:
-        # Usar cache
-        timestamp = int(time.time() // 300)  # Cache por 5 minutos
+        timestamp = int(time.time() // 300)
         eventos_db = get_eventos_cache_key(user_id, timestamp)
 
         eventos_pessoais = []
@@ -1486,7 +1905,47 @@ def buscar_eventos_calendario():
                 'allDay': False if row['hora_evento'] else True
             })
 
-        todos_eventos = EVENTOS_ACADEMICOS + eventos_pessoais
+        # ============================================
+        # 🆕 V7.0: BUSCAR EVENTOS DO CALENDÁRIO LYCEUM
+        # ============================================
+        eventos_lyceum = []
+        try:
+            with get_db_connection() as conn:
+                c = conn.cursor()
+                c.execute('''
+                    SELECT id, titulo, data_evento, tipo, cor, descricao
+                    FROM calendario_lyceum
+                    WHERE usuario_id = ?
+                ''', (user_id,))
+                
+                for row in c.fetchall():
+                    eventos_lyceum.append({
+                        'id': f"lyceum_{row['id']}",
+                        'title': row['titulo'],
+                        'start': row['data_evento'],
+                        'color': row['cor'] or '#4a90e2',
+                        'extendedProps': {
+                            'descricao': row['descricao'] or '',
+                            'tipo': row['tipo'] or 'evento',
+                            'pessoal': False,
+                            'origem': 'lyceum'
+                        },
+                        'allDay': True
+                    })
+                
+                if eventos_lyceum:
+                    print(f"[CALENDARIO] Carregados {len(eventos_lyceum)} eventos do Lyceum")
+        except Exception as e:
+            # Tabela pode não existir ainda
+            print(f"[CALENDARIO] Eventos Lyceum não disponíveis: {e}")
+
+        # Combinar: Eventos fixos + Lyceum + Pessoais
+        # Se tiver eventos do Lyceum, usar eles como base. Senão, usar fixos.
+        if eventos_lyceum:
+            todos_eventos = eventos_lyceum + eventos_pessoais
+        else:
+            todos_eventos = EVENTOS_ACADEMICOS + eventos_pessoais
+            
         return jsonify({'success': True, 'eventos': todos_eventos})
     except Exception as e:
         print(f"[ERROR] Erro: {e}")
@@ -1498,7 +1957,7 @@ def criar_evento():
     if 'user_id' not in session:
         return jsonify({'error': 'Não autorizado'}), 401
     user_id = session['user_id']
-    data = request.json
+    data = request.get_json(silent=True) or {}
 
     titulo = sanitizar_html(data.get('titulo'))
     descricao = sanitizar_html(data.get('descricao', ''))
@@ -1539,7 +1998,7 @@ def excluir_evento():
     if 'user_id' not in session:
         return jsonify({'error': 'Não autorizado'}), 401
     user_id = session['user_id']
-    data = request.json
+    data: dict = request.get_json(silent=True) or {}
     evento_id = data.get('evento_id')
 
     try:
@@ -1567,6 +2026,7 @@ def excluir_evento():
 # ============================================
 @app.route('/api/checar_status_sync')
 def checar_status_sync():
+    """Mantida para compatibilidade com tela de loading"""
     if 'user_id' not in session:
         return jsonify({'status': 'erro', 'redirect': url_for('index')})
 
@@ -1578,6 +2038,7 @@ def checar_status_sync():
 
 @app.route('/api/status_sincronizacao')
 def status_sincronizacao_dashboard():
+    """Mantida para compatibilidade"""
     if 'user_id' not in session:
         return jsonify({'error': 'Não autorizado'}), 401
 
@@ -1624,7 +2085,7 @@ def toggle_dark_mode():
 
 
 # ============================================
-# EXPORT DE DADOS (PDF/EXCEL)
+# EXPORT DE DADOS
 # ============================================
 @app.route('/api/exportar_notas/<formato>')
 def exportar_notas(formato):
@@ -1644,7 +2105,7 @@ def exportar_notas(formato):
 
     if formato == 'pdf':
         buffer = io.BytesIO()
-        p = canvas.Canvas(buffer, pagesize=A4)
+        p: Any = Canvas(buffer, pagesize=A4)
 
         y = 800
         p.setFont("Helvetica-Bold", 16)
@@ -1659,7 +2120,6 @@ def exportar_notas(formato):
 
         y -= 50
 
-        # Criar tabela
         data_table = [['Disciplina', 'VA1', 'VA2', 'VA3', 'Média', 'Situação']]
         for nota in notas:
             data_table.append([
@@ -1701,14 +2161,14 @@ def exportar_notas(formato):
 
             wb = openpyxl.Workbook()
             ws = wb.active
+            if ws is None:
+                ws = wb.create_sheet("Notas")
             ws.title = "Notas"
 
-            # Cabeçalho
             ws['A1'] = f"Relatório de Notas - {nome}"
             ws['A1'].font = Font(size=14, bold=True)
             ws['A2'] = f"Data: {datetime.now().strftime('%d/%m/%Y')}"
 
-            # Títulos das colunas
             headers = ['Disciplina', 'VA1', 'VA2', 'VA3', 'Média', 'Situação']
             for col, header in enumerate(headers, start=1):
                 cell = ws.cell(row=4, column=col, value=header)
@@ -1716,7 +2176,6 @@ def exportar_notas(formato):
                 cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
                 cell.alignment = Alignment(horizontal="center")
 
-            # Dados
             for row_idx, nota in enumerate(notas, start=5):
                 ws.cell(row=row_idx, column=1, value=nota['disciplina'])
                 ws.cell(row=row_idx, column=2, value=nota['va1'])
@@ -1725,7 +2184,6 @@ def exportar_notas(formato):
                 ws.cell(row=row_idx, column=5, value=nota['media'])
                 ws.cell(row=row_idx, column=6, value=nota['situacao'])
 
-            # Ajustar largura das colunas
             ws.column_dimensions['A'].width = 40
             for col in ['B', 'C', 'D', 'E']:
                 ws.column_dimensions[col].width = 10
@@ -1745,6 +2203,510 @@ def exportar_notas(formato):
     return jsonify({'error': 'Formato inválido'}), 400
 
 
+from flask import request, jsonify
+from werkzeug.utils import secure_filename
+import os
+import PyPDF2
+import docx
+from youtube_transcript_api import YouTubeTranscriptApi
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+# Carregar variáveis de ambiente do .env
+load_dotenv()
+
+# Configurar Gemini com a chave do .env
+genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+
+# Configurações de upload
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'pdf', 'txt', 'doc', 'docx'}
+
+# Criar pasta de uploads se não existir
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+
+def allowed_file(filename):
+    """Verifica se o arquivo tem extensão permitida"""
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def extract_text_from_pdf(filepath):
+    """Extrai texto de um PDF - SEM LIMITES"""
+    try:
+        text = ""
+        with open(filepath, 'rb') as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            total_pages = len(pdf_reader.pages)
+            print(f"[PDF] Processando {total_pages} páginas...")
+
+            for i, page in enumerate(pdf_reader.pages):
+                try:
+                    page_text = page.extract_text()
+                    text += page_text + "\n"
+                    if (i + 1) % 10 == 0:
+                        print(f"[PDF] Processadas {i + 1}/{total_pages} páginas")
+                except Exception as e:
+                    print(f"[PDF] Erro na página {i + 1}: {e}")
+                    continue
+
+        print(f"[PDF] ✅ Extraído {len(text)} caracteres")
+        return text.strip()
+    except Exception as e:
+        print(f"[PDF] ❌ Erro ao extrair texto: {e}")
+        return None
+
+
+def extract_text_from_docx(filepath):
+    """Extrai texto de um DOCX - SEM LIMITES"""
+    try:
+        doc = docx.Document(filepath)
+        text = ""
+        total_paragraphs = len(doc.paragraphs)
+        print(f"[DOCX] Processando {total_paragraphs} parágrafos...")
+
+        for i, paragraph in enumerate(doc.paragraphs):
+            text += paragraph.text + "\n"
+            if (i + 1) % 100 == 0:
+                print(f"[DOCX] Processados {i + 1}/{total_paragraphs} parágrafos")
+
+        print(f"[DOCX] ✅ Extraído {len(text)} caracteres")
+        return text.strip()
+    except Exception as e:
+        print(f"[DOCX] ❌ Erro ao extrair texto: {e}")
+        return None
+
+
+def extract_text_from_txt(filepath):
+    """Extrai texto de um TXT - SEM LIMITES"""
+    try:
+        with open(filepath, 'r', encoding='utf-8') as file:
+            text = file.read()
+        print(f"[TXT] ✅ Extraído {len(text)} caracteres")
+        return text.strip()
+    except UnicodeDecodeError:
+        # Tenta com outra codificação
+        try:
+            with open(filepath, 'r', encoding='latin-1') as file:
+                text = file.read()
+            print(f"[TXT] ✅ Extraído {len(text)} caracteres (latin-1)")
+            return text.strip()
+        except Exception as e:
+            print(f"[TXT] ❌ Erro ao ler arquivo: {e}")
+            return None
+    except Exception as e:
+        print(f"[TXT] ❌ Erro ao ler arquivo: {e}")
+        return None
+
+
+# ============================================
+# FUNÇÃO ALTERNATIVA - YOUTUBE TRANSCRIPT
+# Use esta versão se a anterior não funcionar
+# ============================================
+
+# ============================================
+# SOLUÇÃO DEFINITIVA - YOUTUBE TRANSCRIPT
+# Múltiplas abordagens para garantir funcionamento
+# ============================================
+
+def extract_youtube_transcript(video_id):
+    """
+    Extrai transcrição usando yt-dlp
+    Método mais robusto e confiável
+    """
+    import subprocess
+    import json
+    import os
+    import tempfile
+
+    print(f"[YOUTUBE] Video ID: {video_id}")
+
+    try:
+        # Verificar se yt-dlp está instalado
+        try:
+            result = subprocess.run(
+                ['yt-dlp', '--version'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode != 0:
+                raise Exception("yt-dlp não está instalado")
+        except FileNotFoundError:
+            print("[YOUTUBE] ❌ yt-dlp não encontrado")
+            print("[YOUTUBE] Instale: pip install yt-dlp --break-system-packages")
+            return None
+
+        # URL do vídeo
+        url = f"https://www.youtube.com/watch?v={video_id}"
+
+        # Criar diretório temporário
+        with tempfile.TemporaryDirectory() as temp_dir:
+            subtitle_file = os.path.join(temp_dir, 'subtitle')
+
+            print("[YOUTUBE] Baixando legendas com yt-dlp...")
+
+            # Comando para baixar legendas
+            cmd = [
+                'yt-dlp',
+                '--write-auto-sub',  # Legendas automáticas
+                '--write-sub',  # Legendas normais
+                '--sub-lang', 'pt,pt-BR,en',  # Idiomas
+                '--skip-download',  # Não baixar vídeo
+                '--sub-format', 'vtt',  # Formato
+                '-o', subtitle_file,
+                url
+            ]
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            # Procurar arquivo de legenda
+            subtitle_files = [
+                f for f in os.listdir(temp_dir)
+                if f.endswith('.vtt')
+            ]
+
+            if not subtitle_files:
+                print("[YOUTUBE] ❌ Nenhuma legenda baixada")
+                print(f"[YOUTUBE] Saída: {result.stderr[:200]}")
+                return None
+
+            # Ler primeira legenda encontrada
+            subtitle_path = os.path.join(temp_dir, subtitle_files[0])
+
+            print(f"[YOUTUBE] ✅ Legenda encontrada: {subtitle_files[0]}")
+
+            with open(subtitle_path, 'r', encoding='utf-8') as f:
+                vtt_content = f.read()
+
+            # Parse VTT
+            lines = vtt_content.split('\n')
+            texts = []
+
+            for line in lines:
+                line = line.strip()
+                # Pular linhas vazias, timestamps e metadata
+                if not line or '-->' in line or line.startswith('WEBVTT') or line.isdigit():
+                    continue
+                # Pular tags
+                if line.startswith('<') or line.startswith('['):
+                    continue
+
+                texts.append(line)
+
+            if not texts:
+                print("[YOUTUBE] ❌ Nenhum texto extraído")
+                return None
+
+            full_text = " ".join(texts)
+
+            print(f"[YOUTUBE] ✅ {len(full_text)} caracteres, {len(texts)} linhas")
+            return full_text
+
+    except subprocess.TimeoutExpired:
+        print("[YOUTUBE] ❌ Timeout ao executar yt-dlp")
+        return None
+
+    except Exception as e:
+        print(f"[YOUTUBE] ❌ Erro: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+# ============================================
+# TESTE
+# ============================================
+
+if __name__ == "__main__":
+    print("🧪 TESTANDO COM YT-DLP")
+    print("=" * 70)
+
+    videos = [
+        ("dQw4w9WgXcQ", "Never Gonna Give You Up"),
+        ("CYRllf5f6HE", "Seu vídeo"),
+    ]
+
+    for video_id, title in videos:
+        print(f"\n📹 {title}")
+        print("-" * 70)
+
+        result = extract_youtube_transcript(video_id)
+
+        if result:
+            print(f"\n✅ SUCESSO! {len(result)} caracteres")
+            print(f"Preview: {result[:200]}...")
+        else:
+            print("\n❌ FALHOU")
+
+        print("=" * 70)
+
+
+def chamar_gemini_api(mensagem):
+    """
+    Chama a API do Gemini com a mensagem fornecida
+    """
+    try:
+        # Criar modelo Gemini
+        model = genai.GenerativeModel('models/gemini-2.5-flash')
+
+        # Gerar resposta
+        print(f"[GEMINI] Enviando {len(mensagem)} caracteres para análise...")
+        response = model.generate_content(mensagem)
+
+        print(f"[GEMINI] ✅ Resposta recebida")
+        return response.text
+
+    except Exception as e:
+        print(f"[GEMINI API] ❌ Erro: {e}")
+        return f"Erro ao processar sua solicitação: {str(e)}"
+
+
+# ============================================
+# ROTA: Chat com arquivo (SEM LIMITES)
+# ============================================
+@app.route('/chat/with-file', methods=['POST'])
+def chat_with_file():
+    """Processa mensagem com arquivo anexado - SEM LIMITES DE TAMANHO"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'Nenhum arquivo enviado'}), 400
+
+        file = request.files['file']
+        message = request.form.get('message', '')
+
+        if file.filename == '':
+            return jsonify({'error': 'Arquivo sem nome'}), 400
+
+        if not allowed_file(file.filename):
+            return jsonify({'error': 'Tipo de arquivo não permitido. Use: PDF, DOC, DOCX ou TXT'}), 400
+
+        print(f"\n[ARQUIVO] Recebido: {file.filename}")
+
+        # Salvar arquivo temporariamente
+        filename = secure_filename(cast(str, file.filename))
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(filepath)
+
+        file_size = os.path.getsize(filepath)
+        print(f"[ARQUIVO] Tamanho: {file_size / (1024 * 1024):.2f} MB")
+
+        # Extrair texto baseado no tipo de arquivo
+        extension = filename.rsplit('.', 1)[1].lower()
+
+        if extension == 'pdf':
+            document_text = extract_text_from_pdf(filepath)
+        elif extension == 'docx':
+            document_text = extract_text_from_docx(filepath)
+        elif extension in ['txt', 'doc']:
+            document_text = extract_text_from_txt(filepath)
+        else:
+            document_text = None
+
+        # Remover arquivo após processamento
+        try:
+            os.remove(filepath)
+            print(f"[ARQUIVO] ✅ Arquivo temporário removido")
+        except:
+            pass
+
+        if not document_text:
+            return jsonify({'error': 'Não foi possível extrair texto do arquivo'}), 400
+
+        # ✅ SEM LIMITE DE TAMANHO - Processa todo o texto
+        print(f"[PROCESSAMENTO] Texto extraído: {len(document_text)} caracteres")
+
+        # Criar prompt com contexto do documento
+        enhanced_message = f"""Você recebeu um documento para análise.
+
+DOCUMENTO ({len(document_text)} caracteres):
+---
+{document_text}
+---
+
+PERGUNTA DO USUÁRIO: {message if message else "Faça um resumo completo e detalhado deste documento"}
+
+Por favor, responda à pergunta com base no conteúdo completo do documento fornecido acima."""
+
+        print(f"[GEMINI] Enviando {len(enhanced_message)} caracteres para análise...")
+
+        # Chamar Gemini API
+        response_text = chamar_gemini_api(enhanced_message)
+
+        print(f"[GEMINI] ✅ Resposta recebida: {len(response_text)} caracteres")
+
+        return jsonify({
+            'success': True,
+            'response': response_text,
+            'document_filename': filename,
+            'document_size': len(document_text),
+            'rate_limited': False
+        })
+
+    except Exception as e:
+        print(f"[ERRO] Chat com arquivo: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================
+# ROTA: Chat com YouTube (SEM LIMITES)
+# ============================================
+@app.route('/chat/with-youtube', methods=['POST'])
+def chat_with_youtube():
+    """Processa mensagem com link do YouTube - SEM LIMITES DE TAMANHO"""
+    try:
+        data = request.get_json()
+        message = data.get('message', '')
+        video_id = data.get('video_id', '')
+
+        if not video_id:
+            return jsonify({'error': 'ID do vídeo não fornecido'}), 400
+
+        print(f"\n[YOUTUBE] Video ID: {video_id}")
+
+        # Extrair transcrição do YouTube
+        transcript_text = extract_youtube_transcript(video_id)
+
+        if not transcript_text:
+            return jsonify({
+                'error': 'Não foi possível obter a transcrição do vídeo. Possíveis causas:\n' +
+                         '• O vídeo não tem legendas\n' +
+                         '• As legendas estão desativadas\n' +
+                         '• O vídeo é privado ou restrito'
+            }), 400
+
+        # ✅ SEM LIMITE DE TAMANHO - Processa toda a transcrição
+        print(f"[PROCESSAMENTO] Transcrição: {len(transcript_text)} caracteres")
+
+        # Criar prompt com contexto do vídeo
+        enhanced_message = f"""Você recebeu a transcrição completa de um vídeo do YouTube para análise.
+
+TRANSCRIÇÃO DO VÍDEO (ID: {video_id}, {len(transcript_text)} caracteres):
+---
+{transcript_text}
+---
+
+PERGUNTA DO USUÁRIO: {message if message else "Faça um resumo completo e detalhado deste vídeo"}
+
+Por favor, responda à pergunta com base no conteúdo completo da transcrição do vídeo fornecida acima."""
+
+        print(f"[GEMINI] Enviando {len(enhanced_message)} caracteres para análise...")
+
+        # Chamar Gemini API
+        response_text = chamar_gemini_api(enhanced_message)
+
+        print(f"[GEMINI] ✅ Resposta recebida: {len(response_text)} caracteres")
+
+        return jsonify({
+            'success': True,
+            'response': response_text,
+            'video_id': video_id,
+            'transcript_size': len(transcript_text),
+            'rate_limited': False
+        })
+
+    except Exception as e:
+        print(f"[ERRO] Chat com YouTube: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================
+# EXEMPLOS DE USO E COMANDOS
+# ============================================
+"""
+📚 EXEMPLOS DE PERGUNTAS PARA PDFs/DOCUMENTOS:
+
+Resumos:
+- "Resuma este documento"
+- "Faça um resumo executivo"
+- "Quais os pontos principais?"
+- "TL;DR deste documento"
+
+Análise:
+- "Quais são os conceitos-chave?"
+- "Qual o tema principal?"
+- "Explique este documento como se eu tivesse 10 anos"
+- "Quais as conclusões do autor?"
+
+Questões:
+- "Crie 10 questões de múltipla escolha sobre este conteúdo"
+- "Gere 5 questões dissertativas"
+- "Crie um quiz com respostas"
+
+Extração:
+- "Liste todos os nomes mencionados"
+- "Quais datas aparecem no documento?"
+- "Extraia todos os números e estatísticas"
+
+🎥 EXEMPLOS DE PERGUNTAS PARA VÍDEOS DO YOUTUBE:
+
+Resumos:
+- "Resuma este vídeo"
+- "Do que se trata este vídeo?"
+- "Principais pontos abordados"
+- "Faça um resumo em tópicos"
+
+Análise:
+- "Qual a mensagem principal do vídeo?"
+- "Quais técnicas/métodos são ensinados?"
+- "Liste os exemplos dados no vídeo"
+
+Questões:
+- "Crie questões sobre o conteúdo"
+- "Teste meu conhecimento sobre o vídeo"
+
+Timestamps:
+- "Quais os principais momentos do vídeo?"
+- "Crie uma linha do tempo do conteúdo"
+
+💡 DICA: Você pode combinar múltiplas perguntas:
+"Resuma o documento, liste os pontos principais e crie 5 questões"
+"""
+
+print("[CHAT ANEXOS] ✅ Sistema de anexos e YouTube carregado!")
+print("[CHAT ANEXOS] 📄 Suporta: PDF, DOC, DOCX, TXT")
+print("[CHAT ANEXOS] 🎥 Suporta: Vídeos do YouTube com legendas")
+print("[CHAT ANEXOS] ♾️  SEM LIMITES de tamanho!")
+print("[CHAT ANEXOS] 🤖 Usando: Google Gemini API")
+
+# ============================================
+# 🚀 INICIALIZAÇÃO
+# ============================================
 if __name__ == '__main__':
+    print("\n" + "=" * 60)
+    print("🚀 INICIANDO IAUniev V5.1 FINAL")
+    print("=" * 60)
+
     init_db()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+
+    print("\n📌 SCRAPERS DISPONÍVEIS:")
+    if SCRAPER_DISPONIVEL:
+        print("   ✅ AVA (Materiais de aula)")
+    if LYCEUM_DISPONIVEL:
+        print("   ✅ LYCEUM (Notas e faltas)")
+
+    print("\n📌 COMPORTAMENTO:")
+    print("   • 1º LOGIN: Scraping automático (5-8 min)")
+    print("   • 2º+ LOGIN: Instantâneo (< 5 seg)")
+    print("   • BOTÕES: Re-sincroniza quando quiser")
+    print("   • SENHA LYCEUM: 9 primeiros dígitos do CPF\n")
+
+    print(f"🌐 Servidor rodando em: http://0.0.0.0:5000")
+    print("=" * 60 + "\n")
+
+    app.run(
+        debug=True,
+        host='0.0.0.0',
+        port=5000,
+        threaded=True
+    )

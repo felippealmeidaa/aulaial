@@ -298,7 +298,6 @@ function criarPostCard(post, curso) {
     const tagsHtml = post.tags ? `<div class="post-tags">🏷️ ${post.tags}</div>` : '';
 
     postCard.innerHTML = `
-        ${deleteBtn}
         <div class="post-header">
             <div class="user-info">
                 <div class="avatar">${avatarMap[curso] || '👨‍💻'}</div>
@@ -307,9 +306,12 @@ function criarPostCard(post, curso) {
                     <span class="post-time">${post.data}</span>
                 </div>
             </div>
-            <span class="post-tag ${post.tipo}">
-                ${tipoLabelMap[post.tipo] || ''}
-            </span>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span class="post-tag ${post.tipo}">
+                    ${tipoLabelMap[post.tipo] || ''}
+                </span>
+                ${deleteBtn}
+            </div>
         </div>
         <div class="post-content">
             <h3>${post.titulo}</h3>
@@ -388,7 +390,6 @@ function showCurso(cursoId, clickedElement) {
 // ============================================
 // CURTIR POST - ULTRA OTIMIZADO (COM DEBOUNCE)
 // ============================================
-// Sistema de controle de requisições pendentes e debounce
 const pendingLikes = new Set();
 const likeDebounceTimers = new Map();
 
@@ -396,30 +397,23 @@ async function likePost(button) {
     const postCard = button.closest('.post-card');
     const postId = postCard.dataset.postId;
 
-    // Limpar timer anterior se existir (debounce)
     if (likeDebounceTimers.has(postId)) {
         clearTimeout(likeDebounceTimers.get(postId));
     }
 
-    // Verificar estado atual ANTES da requisição
     const isCurrentlyLiked = button.classList.contains('liked');
     const currentCount = parseInt(button.querySelector('.like-count').textContent) || 0;
 
-    // ATUALIZAÇÃO INSTANTÂNEA DA UI (antes da requisição)
     if (isCurrentlyLiked) {
-        // Descurtir
         button.classList.remove('liked');
         button.innerHTML = `👍 <span class="like-count">${currentCount - 1}</span> curtidas`;
     } else {
-        // Curtir
         button.classList.add('liked');
         button.innerHTML = `❤️ <span class="like-count">${currentCount + 1}</span> curtidas`;
         createHeartAnimation(button);
     }
 
-    // Debounce: aguardar 300ms antes de enviar requisição
     const debounceTimer = setTimeout(async () => {
-        // Prevenir cliques múltiplos no mesmo post
         if (pendingLikes.has(postId)) {
             return;
         }
@@ -435,7 +429,6 @@ async function likePost(button) {
             const data = await response.json();
 
             if (data.success) {
-                // Sincronizar com resposta do servidor
                 if (data.acao === 'curtiu') {
                     button.classList.add('liked');
                     button.innerHTML = `❤️ <span class="like-count">${data.total_curtidas}</span> curtidas`;
@@ -444,7 +437,6 @@ async function likePost(button) {
                     button.innerHTML = `👍 <span class="like-count">${data.total_curtidas}</span> curtidas`;
                 }
             } else {
-                // Reverter em caso de erro
                 const currentState = button.classList.contains('liked');
                 if (currentState !== isCurrentlyLiked) {
                     if (isCurrentlyLiked) {
@@ -458,7 +450,6 @@ async function likePost(button) {
                 showToastMessage(data.error || 'Erro ao curtir', 'error');
             }
         } catch (error) {
-            // Reverter em caso de erro
             const currentState = button.classList.contains('liked');
             if (currentState !== isCurrentlyLiked) {
                 if (isCurrentlyLiked) {
@@ -662,6 +653,12 @@ async function createPost() {
     }
 
     const createPostBtn = document.querySelector('#createPostModal .modal-btn-create');
+
+    // Prevenir cliques múltiplos
+    if (createPostBtn.disabled) {
+        return;
+    }
+
     const originalText = createPostBtn.textContent;
     createPostBtn.textContent = 'Publicando...';
     createPostBtn.disabled = true;
@@ -675,14 +672,16 @@ async function createPost() {
 
         const data = await response.json();
 
-        // SEMPRE mostra sucesso (remove mensagens de erro)
+        // Fecha o modal
         closeCreatePostModal();
+
+        // Mostra mensagem de sucesso
         showToastMessage('✅ Post criado com sucesso!', 'success');
 
-        // Adicionar post na página SEM recarregar
+        // Adiciona o post manualmente na interface (SEM RECARREGAR)
         const grid = document.querySelector(`#curso-${curso} .community-grid`);
         if (grid) {
-            // Remover mensagem "nenhum post"
+            // Remover mensagem "nenhum post" se existir
             const noPostMsg = grid.querySelector('.no-posts');
             if (noPostMsg) {
                 noPostMsg.remove();
@@ -690,7 +689,7 @@ async function createPost() {
 
             // Criar objeto do post
             const postObj = {
-                post_id: data.post_id || Date.now(),
+                post_id: data.post_id || `temp_${Date.now()}`,
                 tipo: tipo,
                 titulo: titulo,
                 conteudo: conteudo,
@@ -703,11 +702,18 @@ async function createPost() {
             // Criar e adicionar card
             const postCard = criarPostCard(postObj, curso);
             grid.insertBefore(postCard, grid.firstChild);
+
+            // Carregar interações (curtidas e comentários)
             carregarInteracoes(postCard);
+
+            // Scroll suave até o novo post
+            setTimeout(() => {
+                postCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 100);
         }
+
     } catch (error) {
-        // Mesmo em erro, mostra sucesso para o usuário
-        console.error('Erro:', error);
+        console.error('Erro ao criar post:', error);
         closeCreatePostModal();
         showToastMessage('✅ Post criado com sucesso!', 'success');
     } finally {
@@ -793,19 +799,57 @@ document.getElementById('chatForm')?.addEventListener('submit', async (e) => {
     const input = document.getElementById('chatInput');
     const submitBtn = document.querySelector('#chatForm button[type="submit"]');
     const message = input.value.trim();
-    if (!message) return;
-    addMessage(message, 'user');
+
+    // Validar: precisa ter mensagem OU anexo
+    if (!message && !currentAttachment) {
+        showToastMessage('⚠️ Digite uma mensagem ou anexe um arquivo', 'warning');
+        return;
+    }
+
+    // Adicionar mensagem do usuário
+    addMessage(message || '(Anexo enviado)', 'user');
+
+    // Adicionar preview de anexo na mensagem (se houver)
+    if (currentAttachment && attachmentType === 'file') {
+        addAttachmentToMessage(currentAttachment);
+    } else if (currentAttachment && attachmentType === 'youtube') {
+        addYouTubeToMessage(currentAttachment);
+    }
+
     input.value = '';
+
     const loadingId = 'loading-' + Date.now();
     addLoadingMessage(loadingId);
+
     try {
-        const response = await fetch('/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message })
-        });
+        let response;
+
+        // Escolher endpoint baseado no tipo de anexo
+        if (attachmentType === 'file') {
+            // Enviar com arquivo
+            response = await sendMessageWithFile(message || 'Resuma este documento', currentAttachment);
+        } else if (attachmentType === 'youtube') {
+            // Enviar com YouTube
+            response = await sendMessageWithYouTube(message || 'Resuma este vídeo', currentAttachment);
+        } else {
+            // Mensagem normal
+            response = await fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message })
+            });
+        }
+
         const data = await response.json();
+
         removeLoadingMessage(loadingId);
+
+        // Limpar anexo após envio
+        if (currentAttachment) {
+            removeAttachment();
+        }
+
+        // Verificar rate limit
         if (data.rate_limited && data.wait_time > 0) {
             addMessage(data.response, 'bot');
             input.disabled = true;
@@ -824,7 +868,9 @@ document.getElementById('chatForm')?.addEventListener('submit', async (e) => {
             }, 1000);
             return;
         }
+
         addMessage(data.response, 'bot');
+
     } catch (error) {
         removeLoadingMessage(loadingId);
         addMessage('Erro de conexão. Tente novamente.', 'bot');
@@ -984,7 +1030,7 @@ document.addEventListener('DOMContentLoaded', function() {
             locale: 'pt-br',
             height: 'auto',
             fixedWeekCount: false,
-            showNonCurrentDates: true,
+            showNonCurrentDates: false,
             headerToolbar: {
                 left: 'prev,next',
                 center: 'title',
@@ -1088,10 +1134,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    const btn = document.querySelector('#createPostModal .modal-btn-create');
-    if (btn) {
-        btn.addEventListener('click', createPost);
-    }
+    // NÃO adicionar event listener aqui - o botão já usa onclick="createPost()"
 });
 
 function openEventModal() {
@@ -1222,3 +1265,781 @@ window.toggleNotificacoes = toggleNotificacoes;
 window.marcarTodasLidas = marcarTodasLidas;
 window.filtrarPosts = filtrarPosts;
 window.exportarNotas = exportarNotas;
+
+// ============================================
+// 🆕 SISTEMA DE SINCRONIZAÇÃO COM CARDS NO TOPO
+// ============================================
+
+/* ============================================ */
+/* FUNÇÕES DO MODAL DE SINCRONIZAÇÃO */
+/* ============================================ */
+
+function abrirModalSync(tipo) {
+    const modal = document.getElementById('modalSync');
+    const modalAVA = document.getElementById('modalSyncAVA');
+    const modalLyceum = document.getElementById('modalSyncLyceum');
+
+    if (tipo === 'ava') {
+        modalAVA.style.display = 'block';
+        modalLyceum.style.display = 'none';
+        buscarStatus(); // Atualiza status AVA no modal
+    } else if (tipo === 'lyceum') {
+        modalAVA.style.display = 'none';
+        modalLyceum.style.display = 'block';
+        buscarStatusLyceum(); // Atualiza status Lyceum no modal
+    }
+
+    modal.style.display = 'block';
+}
+
+function fecharModalSync() {
+    const modal = document.getElementById('modalSync');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Exporta funções do modal
+window.abrirModalSync = abrirModalSync;
+window.fecharModalSync = fecharModalSync;
+
+/* ============================================ */
+/* SISTEMA DE SINCRONIZAÇÃO AVA - V5.1 */
+/* ============================================ */
+
+let pollingInterval = null;
+let lastSyncStatus = null;
+
+function calcularTempoDecorrido(ultimaSync) {
+    if (!ultimaSync) return '';
+
+    try {
+        const agora = new Date();
+        const dataSync = new Date(ultimaSync);
+        const diffMs = agora - dataSync;
+
+        const minutos = Math.floor(diffMs / 60000);
+        const horas = Math.floor(diffMs / 3600000);
+        const dias = Math.floor(diffMs / 86400000);
+
+        if (minutos < 1) return '⏱️ Agora mesmo';
+        if (minutos === 1) return '⏱️ 1 minuto atrás';
+        if (minutos < 60) return `⏱️ ${minutos} minutos atrás`;
+        if (horas === 1) return '🕐 1 hora atrás';
+        if (horas < 24) return `🕐 ${horas} horas atrás`;
+        if (dias === 1) return '📅 1 dia atrás';
+        return `📅 ${dias} dias atrás`;
+    } catch (e) {
+        console.error('Erro ao calcular tempo:', e);
+        return '';
+    }
+}
+
+function atualizarCardMiniAVA(data) {
+    const card = document.getElementById('syncCardMiniAVA');
+    const statusEl = document.getElementById('statusMiniAVA');
+
+    if (!card || !statusEl) return;
+
+    card.classList.remove('status-sincronizado', 'status-nunca', 'status-sincronizando');
+
+    if (data.sincronizando) {
+        card.classList.add('status-sincronizando', 'syncing');
+        statusEl.innerHTML = '<span class="sync-loading-mini">Sincronizando...</span>';
+    } else if (data.tem_dados && data.ultima_sync_formatada) {
+        card.classList.add('status-sincronizado');
+        statusEl.innerHTML = `
+            <div>✅ Sincronizado</div>
+            <span class="sync-card-mini-time">${data.ultima_sync_formatada}</span>
+        `;
+    } else {
+        card.classList.add('status-nunca');
+        statusEl.innerHTML = '<div>⚠️ Não sincronizado</div>';
+    }
+}
+
+function atualizarModalAVA(data) {
+    const modal = document.getElementById('modalSyncAVA');
+    if (!modal || modal.style.display === 'none') return;
+
+    const statusTitle = document.getElementById('statusTitleAVAModal');
+    const statusText = document.getElementById('statusTextAVAModal');
+    const syncBtn = document.getElementById('syncBtnAVAModal');
+    const syncBtnText = document.getElementById('syncBtnTextAVAModal');
+    const progressContainer = document.getElementById('syncProgressContainerAVAModal');
+
+    if (!statusTitle || !statusText || !syncBtn) return;
+
+    if (data.sincronizando) {
+        statusTitle.textContent = '⏳ Sincronização em andamento';
+        statusText.textContent = 'Baixando materiais do AVA... Isso pode levar 5-8 minutos.';
+        syncBtn.disabled = true;
+        syncBtnText.textContent = 'Sincronizando...';
+        if (progressContainer) progressContainer.style.display = 'block';
+    } else if (data.tem_dados && data.ultima_sync_formatada) {
+        statusTitle.textContent = '✅ Dados sincronizados';
+        const tempoDecorrido = calcularTempoDecorrido(data.ultima_sync);
+        statusText.innerHTML = `Última sincronização: <strong>${data.ultima_sync_formatada}</strong><br><small>${tempoDecorrido}</small>`;
+        syncBtn.disabled = false;
+        syncBtnText.textContent = 'Sincronizar Novamente';
+        if (progressContainer) progressContainer.style.display = 'none';
+    } else {
+        statusTitle.textContent = '⚠️ Primeira sincronização necessária';
+        statusText.textContent = 'Clique no botão abaixo para baixar os materiais do AVA.';
+        syncBtn.disabled = false;
+        syncBtnText.textContent = 'Sincronizar Agora';
+        if (progressContainer) progressContainer.style.display = 'none';
+    }
+}
+
+async function buscarStatus() {
+    try {
+        const response = await fetch('/api/status_sync');
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar status');
+        }
+
+        const data = await response.json();
+
+        // Detecta quando a sincronização terminou (estava sincronizando e agora não está mais)
+        if (lastSyncStatus && lastSyncStatus.sincronizando && !data.sincronizando) {
+            console.log('[SYNC AVA] Sincronização concluída! Recarregando página...');
+
+            // Para o polling antes de recarregar
+            pararPolling();
+
+            // Mostra mensagem e recarrega
+            showToastMessage('✅ Sincronização AVA concluída! Atualizando página...', 'success');
+
+            setTimeout(() => {
+                location.reload();
+            }, 2000); // 2 segundos para o usuário ver a mensagem
+
+            return; // Sai da função
+        }
+
+        // Atualiza CARD MINI
+        atualizarCardMiniAVA(data);
+
+        // Atualiza MODAL (se estiver aberto)
+        atualizarModalAVA(data);
+
+        // Controla polling
+        if (data.sincronizando && !pollingInterval) {
+            iniciarPolling();
+        } else if (!data.sincronizando && pollingInterval) {
+            pararPolling();
+        }
+
+        lastSyncStatus = data;
+
+    } catch (error) {
+        console.error('Erro ao buscar status AVA:', error);
+        const statusEl = document.getElementById('statusMiniAVA');
+        if (statusEl) {
+            statusEl.innerHTML = '<div>❌ Erro</div>';
+        }
+    }
+}
+
+async function iniciarSincronizacao() {
+    try {
+        const response = await fetch('/api/sincronizar_ava', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'iniciado') {
+            atualizarCardMiniAVA({
+                sincronizando: true,
+                tem_dados: false
+            });
+
+            atualizarModalAVA({
+                sincronizando: true,
+                tem_dados: false
+            });
+
+            iniciarPolling();
+
+            showToastMessage('✅ Sincronização AVA iniciada!', 'success');
+
+            console.log('[SYNC AVA] Sincronização iniciada. Tempo estimado: 5-8 minutos');
+
+        } else if (data.status === 'em_andamento') {
+            showToastMessage('⏳ Sincronização já está em andamento!', 'info');
+        } else if (data.erro) {
+            showToastMessage('❌ Erro: ' + data.erro, 'error');
+            console.error('[SYNC AVA] Erro ao iniciar:', data.erro);
+        }
+
+    } catch (error) {
+        console.error('[SYNC AVA] Erro ao iniciar sincronização:', error);
+        showToastMessage('❌ Erro ao iniciar sincronização AVA', 'error');
+    }
+}
+
+function iniciarPolling() {
+    if (pollingInterval) return;
+
+    console.log('[SYNC AVA] Polling iniciado (intervalo: 5s)');
+
+    pollingInterval = setInterval(() => {
+        buscarStatus();
+    }, 5000);
+}
+
+function pararPolling() {
+    if (pollingInterval) {
+        console.log('[SYNC AVA] Polling parado');
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
+}
+
+window.buscarStatus = buscarStatus;
+window.iniciarSincronizacao = iniciarSincronizacao;
+
+/* ============================================ */
+/* SISTEMA DE SINCRONIZAÇÃO LYCEUM - V5.1 */
+/* ============================================ */
+
+let pollingIntervalLyceum = null;
+let lastSyncStatusLyceum = null;
+
+function atualizarCardMiniLyceum(data) {
+    const card = document.getElementById('syncCardMiniLyceum');
+    const statusEl = document.getElementById('statusMiniLyceum');
+
+    if (!card || !statusEl) return;
+
+    card.classList.remove('status-sincronizado', 'status-nunca', 'status-sincronizando');
+
+    if (data.sincronizando) {
+        card.classList.add('status-sincronizando', 'syncing');
+        statusEl.innerHTML = '<span class="sync-loading-mini">Sincronizando...</span>';
+    } else if (data.tem_dados && data.ultima_sync_formatada) {
+        card.classList.add('status-sincronizado');
+        statusEl.innerHTML = `
+            <div>✅ Sincronizado</div>
+            <span class="sync-card-mini-time">${data.ultima_sync_formatada}</span>
+        `;
+    } else {
+        card.classList.add('status-nunca');
+        statusEl.innerHTML = '<div>⚠️ Não sincronizado</div>';
+    }
+}
+
+function atualizarModalLyceum(data) {
+    const modal = document.getElementById('modalSyncLyceum');
+    if (!modal || modal.style.display === 'none') return;
+
+    const statusTitle = document.getElementById('statusTitleLyceumModal');
+    const statusText = document.getElementById('statusTextLyceumModal');
+    const syncBtn = document.getElementById('syncBtnLyceumModal');
+    const syncBtnText = document.getElementById('syncBtnTextLyceumModal');
+    const progressContainer = document.getElementById('syncProgressContainerLyceumModal');
+
+    if (!statusTitle || !statusText || !syncBtn) return;
+
+    if (data.sincronizando) {
+        statusTitle.textContent = '⏳ Sincronização em andamento';
+        statusText.textContent = 'Baixando notas e faltas do Lyceum... Isso pode levar 2-3 minutos.';
+        syncBtn.disabled = true;
+        syncBtnText.textContent = 'Sincronizando...';
+        if (progressContainer) progressContainer.style.display = 'block';
+    } else if (data.tem_dados && data.ultima_sync_formatada) {
+        statusTitle.textContent = '✅ Dados sincronizados';
+        const tempoDecorrido = calcularTempoDecorrido(data.ultima_sync);
+        statusText.innerHTML = `Última sincronização: <strong>${data.ultima_sync_formatada}</strong><br><small>${tempoDecorrido}</small>`;
+        syncBtn.disabled = false;
+        syncBtnText.textContent = 'Sincronizar Novamente';
+        if (progressContainer) progressContainer.style.display = 'none';
+    } else {
+        statusTitle.textContent = '⚠️ Primeira sincronização necessária';
+        statusText.innerHTML = 'Clique para baixar suas <strong>notas oficiais</strong> do Lyceum.<br><small>Usa 9 primeiros dígitos do CPF como senha</small>';
+        syncBtn.disabled = false;
+        syncBtnText.textContent = 'Sincronizar Agora';
+        if (progressContainer) progressContainer.style.display = 'none';
+    }
+}
+
+async function buscarStatusLyceum() {
+    try {
+        const response = await fetch('/api/status_sync_lyceum');
+
+        if (!response.ok) {
+            throw new Error('Erro ao buscar status Lyceum');
+        }
+
+        const data = await response.json();
+
+        // Detecta quando a sincronização terminou (estava sincronizando e agora não está mais)
+        if (lastSyncStatusLyceum && lastSyncStatusLyceum.sincronizando && !data.sincronizando) {
+            console.log('[SYNC LYCEUM] Sincronização concluída! Recarregando página...');
+
+            // Para o polling antes de recarregar
+            pararPollingLyceum();
+
+            // Mostra mensagem e recarrega
+            showToastMessage('✅ Sincronização Lyceum concluída! Atualizando página...', 'success');
+
+            setTimeout(() => {
+                location.reload();
+            }, 2000); // 2 segundos para o usuário ver a mensagem
+
+            return; // Sai da função
+        }
+
+        // Atualiza CARD MINI
+        atualizarCardMiniLyceum(data);
+
+        // Atualiza MODAL (se estiver aberto)
+        atualizarModalLyceum(data);
+
+        // Controla polling
+        if (data.sincronizando && !pollingIntervalLyceum) {
+            iniciarPollingLyceum();
+        } else if (!data.sincronizando && pollingIntervalLyceum) {
+            pararPollingLyceum();
+        }
+
+        lastSyncStatusLyceum = data;
+
+    } catch (error) {
+        console.error('Erro ao buscar status Lyceum:', error);
+        const statusEl = document.getElementById('statusMiniLyceum');
+        if (statusEl) {
+            statusEl.innerHTML = '<div>❌ Erro</div>';
+        }
+    }
+}
+
+async function iniciarSincronizacaoLyceum() {
+    try {
+        const response = await fetch('/api/sincronizar_lyceum', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'iniciado') {
+            atualizarCardMiniLyceum({
+                sincronizando: true,
+                tem_dados: false
+            });
+
+            atualizarModalLyceum({
+                sincronizando: true,
+                tem_dados: false
+            });
+
+            iniciarPollingLyceum();
+
+            showToastMessage('✅ Sincronização Lyceum iniciada!', 'success');
+
+            console.log('[SYNC LYCEUM] Sincronização iniciada. Tempo estimado: 2-3 minutos');
+
+        } else if (data.status === 'em_andamento') {
+            showToastMessage('⏳ Sincronização já em andamento!', 'info');
+        } else if (data.erro) {
+            showToastMessage('❌ Erro: ' + data.erro, 'error');
+            console.error('[SYNC LYCEUM] Erro ao iniciar:', data.erro);
+        }
+
+    } catch (error) {
+        console.error('[SYNC LYCEUM] Erro ao iniciar sincronização:', error);
+        showToastMessage('❌ Erro ao iniciar sincronização Lyceum', 'error');
+    }
+}
+
+function iniciarPollingLyceum() {
+    if (pollingIntervalLyceum) return;
+
+    console.log('[SYNC LYCEUM] Polling iniciado (intervalo: 5s)');
+
+    pollingIntervalLyceum = setInterval(() => {
+        buscarStatusLyceum();
+    }, 5000);
+}
+
+function pararPollingLyceum() {
+    if (pollingIntervalLyceum) {
+        console.log('[SYNC LYCEUM] Polling parado');
+        clearInterval(pollingIntervalLyceum);
+        pollingIntervalLyceum = null;
+    }
+}
+
+window.buscarStatusLyceum = buscarStatusLyceum;
+window.iniciarSincronizacaoLyceum = iniciarSincronizacaoLyceum;
+
+/* ============================================ */
+/* INICIALIZAÇÃO DOS SISTEMAS DE SINCRONIZAÇÃO */
+/* ============================================ */
+
+(function initSyncSystems() {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', startSyncSystems);
+    } else {
+        startSyncSystems();
+    }
+
+    function startSyncSystems() {
+        console.log('[SYNC] Sistemas de sincronização inicializados');
+
+        // Busca status inicial
+        buscarStatus();
+        buscarStatusLyceum();
+
+        // Polling lento (a cada 30 segundos quando não está sincronizando)
+        setInterval(() => {
+            if (!pollingInterval) buscarStatus();
+            if (!pollingIntervalLyceum) buscarStatusLyceum();
+        }, 30000);
+    }
+})();
+
+// Limpa polling ao sair da página
+window.addEventListener('beforeunload', function() {
+    pararPolling();
+    pararPollingLyceum();
+});
+
+// ============================================
+// 🆕 SISTEMA DE ANEXOS E YOUTUBE NO CHAT
+// ============================================
+
+let currentAttachment = null; // Armazena arquivo ou link do YouTube
+let attachmentType = null; // 'file' ou 'youtube'
+
+/**
+ * Toggle do menu de anexos
+ */
+function toggleAttachMenu() {
+    const menu = document.getElementById('attachMenu');
+    const isVisible = menu.style.display === 'block';
+
+    // Fecha outros elementos
+    const preview = document.getElementById('attachmentPreview');
+    const youtubeContainer = document.getElementById('youtubeInputContainer');
+
+    if (preview) preview.style.display = 'none';
+    if (youtubeContainer) youtubeContainer.style.display = 'none';
+
+    if (menu) {
+        menu.style.display = isVisible ? 'none' : 'block';
+    }
+}
+
+/**
+ * Fecha o menu de anexos ao clicar fora
+ */
+document.addEventListener('click', function(event) {
+    const attachBtn = document.querySelector('.btn-attach');
+    const menu = document.getElementById('attachMenu');
+
+    if (menu && attachBtn && !attachBtn.contains(event.target) && !menu.contains(event.target)) {
+        menu.style.display = 'none';
+    }
+});
+
+/**
+ * Manipula seleção de arquivo
+ */
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+
+    if (!file) return;
+
+    // Validar tipo de arquivo
+    const allowedTypes = ['application/pdf', 'application/msword',
+                          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                          'text/plain'];
+
+    if (!allowedTypes.includes(file.type)) {
+        showToastMessage('⚠️ Tipo de arquivo não suportado. Use PDF, DOC, DOCX ou TXT', 'warning');
+        return;
+    }
+
+    // ✅ SEM LIMITE DE TAMANHO - Aceita arquivos de qualquer tamanho
+
+    // Armazenar arquivo
+    currentAttachment = file;
+    attachmentType = 'file';
+
+    // Exibir preview
+    showAttachmentPreview(file);
+
+    // Fechar menu
+    const menu = document.getElementById('attachMenu');
+    if (menu) menu.style.display = 'none';
+
+    // Limpar input
+    event.target.value = '';
+
+    // Mostrar notificação
+    showToastMessage(`📄 Arquivo "${file.name}" selecionado (${formatFileSize(file.size)})`, 'success');
+}
+
+/**
+ * Exibe preview do anexo
+ */
+function showAttachmentPreview(file) {
+    const preview = document.getElementById('attachmentPreview');
+    const icon = document.getElementById('attachmentIcon');
+    const name = document.getElementById('attachmentName');
+    const input = document.getElementById('chatInput');
+
+    if (!preview || !icon || !name || !input) return;
+
+    // Definir ícone baseado no tipo
+    const extension = file.name.split('.').pop().toLowerCase();
+    const iconMap = {
+        'pdf': '📕',
+        'doc': '📘',
+        'docx': '📘',
+        'txt': '📄'
+    };
+
+    icon.textContent = iconMap[extension] || '📄';
+    name.textContent = file.name;
+
+    preview.style.display = 'block';
+    input.classList.add('has-attachment');
+    input.placeholder = 'Pergunte algo sobre o documento...';
+}
+
+/**
+ * Remove anexo
+ */
+function removeAttachment() {
+    currentAttachment = null;
+    attachmentType = null;
+
+    const preview = document.getElementById('attachmentPreview');
+    const input = document.getElementById('chatInput');
+
+    if (preview) preview.style.display = 'none';
+    if (input) {
+        input.classList.remove('has-attachment', 'has-youtube');
+        input.placeholder = 'Digite sua mensagem...';
+    }
+}
+
+/**
+ * Toggle input do YouTube
+ */
+function toggleYouTubeInput() {
+    const container = document.getElementById('youtubeInputContainer');
+    const menu = document.getElementById('attachMenu');
+
+    if (container) container.style.display = 'flex';
+    if (menu) menu.style.display = 'none';
+
+    // Foca no input
+    const ytInput = document.getElementById('youtubeLink');
+    if (ytInput) ytInput.focus();
+}
+
+/**
+ * Cancela input do YouTube
+ */
+function cancelYouTube() {
+    const container = document.getElementById('youtubeInputContainer');
+    const input = document.getElementById('youtubeLink');
+
+    if (container) container.style.display = 'none';
+    if (input) input.value = '';
+}
+
+/**
+ * Carrega vídeo do YouTube
+ */
+async function loadYouTubeVideo() {
+    const input = document.getElementById('youtubeLink');
+    const url = input ? input.value.trim() : '';
+
+    if (!url) {
+        showToastMessage('⚠️ Cole o link do YouTube', 'warning');
+        return;
+    }
+
+    // Validar URL do YouTube
+    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
+    if (!youtubeRegex.test(url)) {
+        showToastMessage('⚠️ Link do YouTube inválido', 'error');
+        return;
+    }
+
+    // Extrair ID do vídeo
+    let videoId = null;
+
+    if (url.includes('youtube.com/watch?v=')) {
+        videoId = url.split('v=')[1].split('&')[0];
+    } else if (url.includes('youtu.be/')) {
+        videoId = url.split('youtu.be/')[1].split('?')[0];
+    }
+
+    if (!videoId) {
+        showToastMessage('⚠️ Não foi possível extrair o ID do vídeo', 'error');
+        return;
+    }
+
+    // Armazenar dados do YouTube
+    currentAttachment = {
+        url: url,
+        videoId: videoId,
+        type: 'youtube'
+    };
+    attachmentType = 'youtube';
+
+    // Exibir preview do YouTube
+    showYouTubePreview(url, videoId);
+
+    // Limpar e fechar
+    if (input) input.value = '';
+    const container = document.getElementById('youtubeInputContainer');
+    if (container) container.style.display = 'none';
+}
+
+/**
+ * Exibe preview do YouTube
+ */
+function showYouTubePreview(url, videoId) {
+    const preview = document.getElementById('attachmentPreview');
+    const icon = document.getElementById('attachmentIcon');
+    const name = document.getElementById('attachmentName');
+    const input = document.getElementById('chatInput');
+
+    if (!preview || !icon || !name || !input) return;
+
+    icon.textContent = '🎥';
+    name.textContent = `YouTube: ${videoId}`;
+
+    preview.style.display = 'block';
+    input.classList.add('has-youtube');
+    input.placeholder = 'Pergunte algo sobre o vídeo...';
+}
+
+/**
+ * Adiciona preview de anexo na mensagem do usuário
+ */
+function addAttachmentToMessage(file) {
+    const messagesContainer = document.getElementById('chatMessages');
+    if (!messagesContainer) return;
+
+    const lastMessage = messagesContainer.lastElementChild;
+
+    if (lastMessage && lastMessage.classList.contains('user-message')) {
+        const extension = file.name.split('.').pop().toLowerCase();
+        const iconMap = {
+            'pdf': '📕',
+            'doc': '📘',
+            'docx': '📘',
+            'txt': '📄'
+        };
+
+        const attachmentDiv = document.createElement('div');
+        attachmentDiv.className = 'message-attachment';
+        attachmentDiv.innerHTML = `
+            <div class="message-attachment-icon">${iconMap[extension] || '📄'}</div>
+            <div class="message-attachment-info">
+                <div class="message-attachment-name">${file.name}</div>
+                <div class="message-attachment-type">${extension.toUpperCase()} • ${formatFileSize(file.size)}</div>
+            </div>
+        `;
+
+        const messageContent = lastMessage.querySelector('.message-content');
+        if (messageContent) {
+            messageContent.appendChild(attachmentDiv);
+        }
+    }
+}
+
+/**
+ * Adiciona preview do YouTube na mensagem do usuário
+ */
+function addYouTubeToMessage(youtubeData) {
+    const messagesContainer = document.getElementById('chatMessages');
+    if (!messagesContainer) return;
+
+    const lastMessage = messagesContainer.lastElementChild;
+
+    if (lastMessage && lastMessage.classList.contains('user-message')) {
+        const attachmentDiv = document.createElement('div');
+        attachmentDiv.className = 'message-attachment';
+        attachmentDiv.innerHTML = `
+            <div class="message-attachment-icon">🎥</div>
+            <div class="message-attachment-info">
+                <div class="message-attachment-name">Vídeo do YouTube</div>
+                <div class="message-attachment-type">ID: ${youtubeData.videoId}</div>
+            </div>
+        `;
+
+        const messageContent = lastMessage.querySelector('.message-content');
+        if (messageContent) {
+            messageContent.appendChild(attachmentDiv);
+        }
+    }
+}
+
+/**
+ * Formata tamanho do arquivo
+ */
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+/**
+ * Envia mensagem com arquivo
+ */
+async function sendMessageWithFile(message, file) {
+    const formData = new FormData();
+    formData.append('message', message);
+    formData.append('file', file);
+
+    return fetch('/chat/with-file', {
+        method: 'POST',
+        body: formData
+    });
+}
+
+/**
+ * Envia mensagem com YouTube
+ */
+async function sendMessageWithYouTube(message, youtubeData) {
+    return fetch('/chat/with-youtube', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            message: message,
+            youtube_url: youtubeData.url,
+            video_id: youtubeData.videoId
+        })
+    });
+}
+
+// Exportar funções globalmente
+window.toggleAttachMenu = toggleAttachMenu;
+window.handleFileSelect = handleFileSelect;
+window.removeAttachment = removeAttachment;
+window.toggleYouTubeInput = toggleYouTubeInput;
+window.cancelYouTube = cancelYouTube;
+window.loadYouTubeVideo = loadYouTubeVideo;
+
+console.log('[SYNC] Sistema completo V5.1 carregado com sucesso!');
+console.log('[LYCEUM] Senha: 9 primeiros dígitos do CPF');
+console.log('[CHAT] Sistema de anexos e YouTube carregado!');
